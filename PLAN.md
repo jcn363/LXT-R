@@ -1265,41 +1265,10 @@ All depend on: ───────┘
 
 ## 8. Verification (DRY-Optimized)
 
-Each shared primitive gets tested once, then reused:
+Each shared primitive gets tested once, then reused. Tests live in each crate's `tests/` directory — see `crates/*/tests/` for current coverage.
 
-```rust
-// ltx-attention/tests/rope.rs — (aspirational, not yet implemented)
-#[test]
-fn test_interleaved_rope() {
-    let q = Tensor::randn([1, 8, 16, 256], (Kind::Float, Device::Cpu));
-    let (cos, sin) = precompute_freqs_cis(256, 16, 10000.0, RopeType::Interleaved, Device::Cpu);
-    let q_rot = apply_interleaved(&q, &cos, &sin);
-    // Verify rotation preserves norms
-    assert!((q.norm(()) - q_rot.norm(())).abs().double_value(&[]) < 1e-5);
-}
-
-// ltx-norm/tests/rms_norm.rs — (aspirational, not yet implemented)
-#[test]
-fn test_rms_norm_matches_python() {
-    let x = Tensor::randn([2, 16, 3840], (Kind::Float, Device::Cpu));
-    let norm = RMSNorm::new(3840, 1e-6, Device::Cpu);
-    let out = norm.forward(&x);
-    let python_out = Tensor::read_npz("tests/golden/rms_norm.npz").unwrap();
-    assert!(out.allclose(&python_out, 1e-6, 1e-4));
-}
-
-// ltx-conv/tests/causal_conv3d.rs — (aspirational, not yet implemented)
-#[test]
-fn test_causal_conv3d_matches_python() {
-    let x = Tensor::randn([1, 64, 8, 16, 16], (Kind::Float, Device::Cpu));
-    let conv = CausalConv3d::new(64, 64, 3, 1);
-    let out = conv.forward(&x, true);
-    let python_out = Tensor::read_npz("tests/golden/causal_conv3d.npz").unwrap();
-    assert!(out.allclose(&python_out, 1e-5, 1e-4));
-}
-
-> **Note:** These test examples are aspirational — they show the planned golden-test infrastructure. Currently, tests verify structural correctness (compilation, type checking) rather than numerical equivalence against a Python reference. Golden `.npz` test infrastructure is TBD.
-```
+- **Current**: Structural correctness (compilation, type checking) via `cargo test --workspace`
+- **Planned**: Golden `.npz` comparison tests verified against Python reference output (infrastructure TBD)
 
 ---
 
