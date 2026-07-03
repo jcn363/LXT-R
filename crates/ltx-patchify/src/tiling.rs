@@ -202,9 +202,11 @@ mod tests {
         let mask = trapezoidal_mask(8, 2, true, false);
         assert_eq!(mask.size(), vec![8]);
         // First tile: no ramp on left, ramp down on right
+        // overlap=2 → ramp = [1.0, 0.5] at positions [6, 7]
         assert_eq!(mask.double_value(&[0]), 1.0);
-        assert_eq!(mask.double_value(&[6]), 0.5);
-        assert_eq!(mask.double_value(&[7]), 0.0);
+        assert_eq!(mask.double_value(&[5]), 1.0);
+        assert_eq!(mask.double_value(&[6]), 1.0);
+        assert_eq!(mask.double_value(&[7]), 0.5);
     }
 
     #[test]

@@ -1,22 +1,22 @@
 use tch::Tensor;
 
-/// Reshape (B, C, T, H, W) → (B, C·r², T, H/r, W/r).
-/// Spatial information is packed into the channel dimension.
+/// Reshape `(B, C, T, H, W)` → `(B, C·r², T, H/r, W/r)`.
+///
+/// Packs each r×r spatial block into the channel dimension.
 pub fn space_to_depth(x: &Tensor, r: i64) -> Tensor {
     let (b, c, t, h, w) = x.size5().unwrap();
-    // (B, C, T, H/r, r, W/r, r) → permute to group r×r patches with channels
     x.reshape([b, c, t, h / r, r, w / r, r])
-        .permute([0, 1, 3, 5, 2, 4, 6])  // (B, C, H/r, W/r, T, r, r)
+        .permute([0, 1, 4, 6, 2, 3, 5])
         .reshape([b, c * r * r, t, h / r, w / r])
 }
 
 /// Inverse of `space_to_depth`.
-/// (B, C·r², T, H/r, W/r) → (B, C, T, H, W)
+/// `(B, C·r², T, H/r, W/r)` → `(B, C, T, H, W)`
 pub fn depth_to_space(x: &Tensor, r: i64) -> Tensor {
     let (b, crr, t, hdiv, wdiv) = x.size5().unwrap();
     let c = crr / (r * r);
     x.reshape([b, c, r, r, t, hdiv, wdiv])
-        .permute([0, 1, 6, 2, 4, 3, 5])  // (B, C, W/r, r, T, r, H/r) -- no wait
+        .permute([0, 1, 4, 5, 2, 6, 3])
         .reshape([b, c, t, hdiv * r, wdiv * r])
 }
 

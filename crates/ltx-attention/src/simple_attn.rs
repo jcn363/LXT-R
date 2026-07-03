@@ -59,7 +59,7 @@ impl SimpleAttnBlock {
         let scale = (c as f64).powf(-0.5);
         let w = q.matmul(&k) * scale;
         let w = w.softmax(-1, tch::Kind::Float);
-        let h = v.matmul(&w.transpose(1, 2)).reshape([b, c, height, width]);
+        let h = w.matmul(&v).transpose(1, 2).reshape([b, c, height, width]);
         x + self.proj_out.forward_t(&h, false)
     }
 }

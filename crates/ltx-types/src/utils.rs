@@ -17,13 +17,19 @@ pub fn to_denoised(sample: &Tensor, velocity: &Tensor, sigma: f64, calc_dtype: t
 }
 
 /// Projection coefficient for APG guider. THE ONLY implementation.
+/// Returns a [B, 1, 1, ...] tensor that broadcasts with any spatial shape.
 pub fn projection_coef(to_project: &Tensor, project_onto: &Tensor) -> Tensor {
     let b = to_project.size()[0];
+    let ndim = to_project.dim();
     let pos_flat = to_project.reshape([b, -1]);
     let neg_flat = project_onto.reshape([b, -1]);
     let dims: &[i64] = &[1];
     let dot = (&pos_flat * &neg_flat).sum_dim_intlist(dims, true, tch::Kind::Float);
     let sq_norm =
         (&neg_flat * &neg_flat).sum_dim_intlist(dims, true, tch::Kind::Float) + PROJECTION_EPS;
-    dot / sq_norm
+    let coef = dot / sq_norm;
+    // Reshape to [B, 1, 1, ...] so it broadcasts with the original spatial dims
+    let mut shape = vec![b, 1];
+    shape.extend(std::iter::repeat_n(1, ndim - 2));
+    coef.reshape(shape)
 }

@@ -349,7 +349,28 @@ mod tests {
         let decoder = AudioDecoder::new(vs.root() / "decoder", &config);
 
         let x = Tensor::randn([1, 128, 64, 128], (tch::Kind::Float, tch::Device::Cpu));
-        let latent = encoder.forward(&x);
+
+        // Debug: trace encoder shapes
+        let h = encoder.conv_in.forward_t(&x, false);
+        eprintln!("conv_in: {:?}", h.size());
+        let mut h = h;
+        for (i, stage) in encoder.downsample_stages.iter().enumerate() {
+            h = stage.resblock.forward(&h);
+            eprintln!("after resblock {i}: {:?}", h.size());
+            if let Some(ref c) = stage.conv {
+                h = c.forward(&h, true);
+                eprintln!("after downsample {i}: {:?}", h.size());
+            }
+        }
+        eprintln!("before attention: {:?}", h.size());
+        for (i, attn) in encoder.mid_attention.iter().enumerate() {
+            h = attn.forward(&h);
+            eprintln!("after attention {i}: {:?}", h.size());
+        }
+        h = encoder.norm_out.forward(&h);
+        h = h.silu();
+        let latent = encoder.conv_out.forward_t(&h, false);
+        eprintln!("latent: {:?}", latent.size());
 
         assert_eq!(latent.size()[0], 1);
         assert_eq!(latent.size()[1], config.latent_channels);

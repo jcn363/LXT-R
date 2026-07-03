@@ -25,9 +25,14 @@ pub fn unpatchify_5d(
     p2: i64,
     p3: i64,
 ) -> Tensor {
-    x.reshape([b, f, h, w, c, p1, p2, p3])
+    // x has shape [B, (f/p1)*(h/p2)*(w/p3), c*p1*p2*p3]
+    // We need to reconstruct the grid: [B, f/p1, h/p2, w/p3, c, p1, p2, p3]
+    let fp = f / p1;
+    let hp = h / p2;
+    let wp = w / p3;
+    x.reshape([b, fp, hp, wp, c, p1, p2, p3])
         .permute([0, 4, 1, 5, 2, 6, 3, 7])
-        .reshape([b, c, f * p1, h * p2, w * p3])
+        .reshape([b, c, f, h, w])
 }
 
 /// Patchify 4D tensor `(B,C,H,W)` → `(B, C*p*p, H/p, W/p)`.
@@ -43,7 +48,9 @@ pub fn patchify_4d(x: &Tensor, p: i64) -> Tensor {
 
 /// Unpatchify 4D tensor back to `(B, C, H, W)`.
 pub fn unpatchify_4d(x: &Tensor, b: i64, c: i64, h: i64, w: i64, p: i64) -> Tensor {
-    x.reshape([b, c, p, p, h, w])
+    let (b_actual, _, hp, wp) = x.size4().unwrap();
+    let _ = b_actual;
+    x.reshape([b, c, p, p, hp, wp])
         .permute([0, 1, 4, 2, 5, 3])
         .reshape([b, c, h, w])
 }
@@ -77,8 +84,8 @@ mod tests {
         let p2 = 4i64;
         let p3 = 4i64;
         let patched = patchify_5d(&x, p1, p2, p3);
-        // Expected: (1, 4*2, 8/2, 16/4, 16/4) → (1, 8, 4, 4, 4)
-        assert_eq!(patched.size(), vec![1, 4, 4 * 4, 4 * p1 * p2 * p3]);
+        // Output is [B, T, D] where T=(F/p1)*(H/p2)*(W/p3), D=C*p1*p2*p3
+        assert_eq!(patched.size(), vec![1, 4 * 4 * 4, 4 * p1 * p2 * p3]);
         let unp = unpatchify_5d(&patched, 1, 4, 8, 16, 16, p1, p2, p3);
         assert_eq!(unp.size(), vec![1, 4, 8, 16, 16]);
         assert!(x.allclose(&unp, 1e-6, 1e-6, false));

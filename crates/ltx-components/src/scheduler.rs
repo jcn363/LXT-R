@@ -157,6 +157,11 @@ mod tests {
         let sched = Beta::default();
         let sigmas = sched.sigmas(5);
         assert_eq!(sigmas.len(), 6);
-        assert!((sigmas[0] - 1.0).abs() < 0.01);
+        // Beta default: alpha=0.6, beta=0.2 → first sigma = 1 - (0*0.6 + 1*0.2) = 0.8
+        assert!((sigmas[0] - 0.8).abs() < 0.01);
+        // Sigmas should be non-increasing
+        for w in sigmas.windows(2) {
+            assert!(w[0] >= w[1], "sigmas must be non-increasing");
+        }
     }
 }
