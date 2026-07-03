@@ -8,7 +8,8 @@
 
 /// Check if CUDA kernels are available at runtime.
 pub fn cuda_kernels_available() -> bool {
-    // TODO: Check if CUDA device is available and kernels were compiled
+    // CUDA kernels not yet compiled — always returns false.
+    // To enable: build with `--features cuda` and link kernels.cu via build.rs.
     false
 }
 

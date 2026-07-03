@@ -51,10 +51,14 @@ impl CausalConv3d {
     ///   first frame, preserving temporal causality.
     /// - `causal = false`: symmetrically pads with the first and last frames.
     pub fn forward(&self, x: &Tensor, causal: bool) -> Tensor {
+        let b = x.size()[0];
+        let c = x.size()[1];
+        let d4 = x.size()[3];
+        let d5 = x.size()[4];
         if causal {
             let first_frame = x.narrow(2, 0, 1);
             let pad = first_frame.expand(
-                [1, 1, self.time_kernel_size - 1, x.size()[3], x.size()[4]],
+                [b, c, self.time_kernel_size - 1, d4, d5],
                 true,
             );
             self.conv.forward(&Tensor::cat(&[&pad, x], 2))
@@ -62,10 +66,10 @@ impl CausalConv3d {
             let half = (self.time_kernel_size - 1) / 2;
             let first = x
                 .narrow(2, 0, 1)
-                .expand([1, 1, half, x.size()[3], x.size()[4]], true);
+                .expand([b, c, half, d4, d5], true);
             let last = x
                 .narrow(2, x.size()[2] - 1, 1)
-                .expand([1, 1, half, x.size()[3], x.size()[4]], true);
+                .expand([b, c, half, d4, d5], true);
             self.conv.forward(&Tensor::cat(&[&first, x, &last], 2))
         }
     }

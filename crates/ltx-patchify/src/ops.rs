@@ -48,8 +48,7 @@ pub fn patchify_4d(x: &Tensor, p: i64) -> Tensor {
 
 /// Unpatchify 4D tensor back to `(B, C, H, W)`.
 pub fn unpatchify_4d(x: &Tensor, b: i64, c: i64, h: i64, w: i64, p: i64) -> Tensor {
-    let (b_actual, _, hp, wp) = x.size4().unwrap();
-    let _ = b_actual;
+    let (_b_actual, _, hp, wp) = x.size4().unwrap();
     x.reshape([b, c, p, p, hp, wp])
         .permute([0, 1, 4, 2, 5, 3])
         .reshape([b, c, h, w])

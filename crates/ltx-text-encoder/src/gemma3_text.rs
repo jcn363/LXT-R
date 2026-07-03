@@ -114,9 +114,8 @@ pub struct Gemma3DecoderLayer {
 }
 
 impl Gemma3DecoderLayer {
-    fn new(config: &Gemma3ConfigData, layer_idx: i64) -> Self {
+    fn new(config: &Gemma3ConfigData) -> Self {
         let device = tch::Device::Cpu;
-        let _ = layer_idx;
         Self {
             self_attn: Gemma3Attention::new(config),
             mlp: Gemma3MLP::new(config),
@@ -154,8 +153,8 @@ impl Gemma3TextModel {
             Tensor::randn([config.vocab_size, config.hidden_size], (tch::Kind::Float, device));
 
         let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
-        for i in 0..config.num_hidden_layers {
-            layers.push(Gemma3DecoderLayer::new(config, i));
+        for _ in 0..config.num_hidden_layers {
+            layers.push(Gemma3DecoderLayer::new(config));
         }
 
         let (cos_cache, sin_cache) = precompute_freqs_cis(

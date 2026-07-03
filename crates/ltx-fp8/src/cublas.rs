@@ -18,12 +18,8 @@ impl CublasFp8Handle {
     ///
     /// Returns `None` if CUDA is not available.
     pub fn new() -> Option<Self> {
-        // TODO: Initialize cuBLAS handle via FFI when CUDA toolchain is available
-        // unsafe {
-        //     let mut handle = std::ptr::null_mut();
-        //     let status = cublasCreate(&mut handle);
-        //     if status == 0 { Some(Self { handle }) } else { None }
-        // }
+        // CUDA FFI not yet wired — returns None on all platforms.
+        // To enable: link against libcublas and call cublasCreate via extern "C".
         None
     }
 
@@ -43,17 +39,6 @@ impl CublasFp8Handle {
     ) -> Tensor {
         unimplemented!("cuBLAS FP8 GEMM — requires CUDA toolchain")
     }
-}
-
-/// Launch the fused add + stochastic rounding kernel on GPU.
-///
-/// THE ONLY fused FP8 add+round kernel in the LTX codebase.
-/// CPU fallback is provided by `calculate_weight_float8` in `cast.rs`.
-#[allow(dead_code)]
-pub(crate) fn fused_add_round_launch(target: &Tensor, original: &Tensor, _device_index: i32) -> Tensor {
-    // TODO: Launch CUDA kernel via FFI when CUDA toolchain is available
-    // For now, fall back to CPU path
-    target + original
 }
 
 #[cfg(test)]

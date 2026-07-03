@@ -80,20 +80,24 @@ impl DualConv3d {
     /// symmetric padding.
     pub fn forward(&self, x: &Tensor, causal: bool) -> Tensor {
         let h = self.conv_spatial.forward(x);
+        let b = h.size()[0];
+        let c = h.size()[1];
+        let d4 = h.size()[3];
+        let d5 = h.size()[4];
 
         if causal {
             let first = h
                 .narrow(2, 0, 1)
-                .expand([1, 1, self.time_kernel_size - 1, h.size()[3], h.size()[4]], true);
+                .expand([b, c, self.time_kernel_size - 1, d4, d5], true);
             self.conv_temporal.forward(&Tensor::cat(&[&first, &h], 2))
         } else {
             let half = (self.time_kernel_size - 1) / 2;
             let first = h
                 .narrow(2, 0, 1)
-                .expand([1, 1, half, h.size()[3], h.size()[4]], true);
+                .expand([b, c, half, d4, d5], true);
             let last = h
                 .narrow(2, h.size()[2] - 1, 1)
-                .expand([1, 1, half, h.size()[3], h.size()[4]], true);
+                .expand([b, c, half, d4, d5], true);
             self.conv_temporal.forward(&Tensor::cat(&[&first, &h, &last], 2))
         }
     }

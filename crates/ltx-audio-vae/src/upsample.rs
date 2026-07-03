@@ -8,12 +8,12 @@ use ltx_types::NormLayerType;
 
 /// A single upsampling stage: ConvTranspose2d → ResnetBlock2D.
 pub struct UpsampleStage {
-    conv: Box<dyn ModuleT>,
-    resblock: ResnetBlock2D,
+    pub(crate) conv: Box<dyn ModuleT>,
+    pub(crate) resblock: ResnetBlock2D,
 }
 
 impl UpsampleStage {
-    pub(crate) fn forward(&self, x: &Tensor) -> Tensor {
+    pub fn forward(&self, x: &Tensor) -> Tensor {
         let h = self.conv.forward_t(x, false);
         self.resblock.forward(&h)
     }

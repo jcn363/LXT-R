@@ -109,12 +109,9 @@ ltx-core-rs/
 │   ├── ltx-attention/                      # ATTENTION — single source of truth
 │   │   └── src/
 │   │       ├── lib.rs
-│   │       ├── qkv.rs                      # QKV projections (to_q, to_k, to_v, to_out)
 │   │       ├── sdpa.rs                     # Scaled dot product attention (SDPA wrapper)
-│   │       ├── flash.rs                    # FlashAttention2/3 FFI (optional)
-│   │       ├── xformers.rs                 # XFormers FFI (optional)
 │   │       ├── rope.rs                     # RoPE: interleaved, split, precompute
-│   │       ├── gated.rs                    # Gated attention (to_gate_logits)
+│   │       ├── transformer_attn.rs         # TransformerAttention (QKV + gating + RoPE)
 │   │       ├── simple_attn.rs              # Simple AttnBlock (Conv2d-based, for VAE)
 │   │       └── factory.rs                  # make_attention(type, dim, heads, ...) → Box<dyn Module>
 │   │
@@ -188,9 +185,8 @@ ltx-core-rs/
 │   │       ├── lib.rs
 │   │       ├── model.rs                    # LTXModel
 │   │       ├── block.rs                    # BasicAVTransformerBlock
-│   │       ├── attention.rs                # TransformerAttention (wraps ltx-attention)
-│   │       ├── args.rs                     # TransformerArgs, preprocessors
-│   │       ├── feed_forward.rs             # FeedForward, GELUApprox
+│   │       ├── args.rs                     # TransformerArgs re-export
+│   │       ├── feed_forward.rs             # FeedForward
 │   │       ├── text_projection.rs          # PixArtAlphaTextProjection
 │   │       └── configurator.rs             # Model config → LTXModel
 │   │

@@ -9,6 +9,9 @@ use ltx_norm::GroupNorm;
 use ltx_resblock::ResnetBlock2D;
 use ltx_types::{NormLayerType, VAE_NORM_NUM_GROUPS};
 
+use crate::downsample::DownsampleStage;
+use crate::upsample::UpsampleStage;
+
 /// Configuration for the Audio VAE (encoder + decoder).
 #[derive(Debug, Clone, Deserialize)]
 pub struct AudioVAEConfig {
@@ -62,22 +65,6 @@ pub struct AudioEncoder {
     conv_out: Conv2DModule,
 }
 
-/// Internal: a single downsampling stage (ResnetBlock2D + optional stride-2 conv).
-struct DownsampleStage {
-    resblock: ResnetBlock2D,
-    conv: Option<CausalConv2d>,
-}
-
-impl DownsampleStage {
-    fn forward(&self, x: &Tensor) -> Tensor {
-        let h = self.resblock.forward(x);
-        match &self.conv {
-            Some(c) => c.forward(&h, true),
-            None => h,
-        }
-    }
-}
-
 impl std::fmt::Debug for AudioEncoder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AudioEncoder").finish()
@@ -122,10 +109,7 @@ impl AudioEncoder {
                     vs / format!("down_{i}") / "downsample",
                     out_ch,
                     out_ch,
-                    4,  // kernel_time
-                    1,  // kernel_freq
-                    2,  // stride_time
-                    1,  // stride_freq
+                    4, 1, 2, 1,
                     CausalityAxis::Time,
                 ))
             } else {
@@ -153,33 +137,20 @@ impl AudioEncoder {
             },
         ));
 
-        Self {
-            conv_in,
-            downsample_stages,
-            mid_attention,
-            norm_out,
-            conv_out,
-        }
+        Self { conv_in, downsample_stages, mid_attention, norm_out, conv_out }
     }
 
     /// Encode audio to latent representation.
-    ///
-    /// Input: `(B, input_features, T, F)`.
-    /// Output: `(B, latent_channels, T', F)`.
     pub fn forward(&self, x: &Tensor) -> Tensor {
         let h = self.conv_in.forward_t(x, false);
-
         let mut h = h;
         for stage in &self.downsample_stages {
             h = stage.forward(&h);
         }
-
         for attn in &self.mid_attention {
             h = attn.forward(&h);
         }
-
-        let h = self.norm_out.forward(&h);
-        let h = h.silu();
+        let h = self.norm_out.forward(&h).silu();
         self.conv_out.forward_t(&h, false)
     }
 }
@@ -200,19 +171,6 @@ pub struct AudioDecoder {
     mid_attention: Vec<SimpleAttnBlock>,
     norm_out: GroupNorm,
     conv_out: Conv2DModule,
-}
-
-/// Internal: a single upsampling stage (ConvTranspose2d + ResnetBlock2D).
-struct UpsampleStage {
-    conv: Box<dyn ModuleT>,
-    resblock: ResnetBlock2D,
-}
-
-impl UpsampleStage {
-    fn forward(&self, x: &Tensor) -> Tensor {
-        let h = self.conv.forward_t(x, false);
-        self.resblock.forward(&h)
-    }
 }
 
 impl std::fmt::Debug for AudioDecoder {

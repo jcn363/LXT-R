@@ -8,12 +8,12 @@ use ltx_types::NormLayerType;
 
 /// A single downsampling stage: ResnetBlock2D → optional CausalConv2d stride-2.
 pub struct DownsampleStage {
-    resblock: ResnetBlock2D,
-    conv: Option<CausalConv2d>,
+    pub(crate) resblock: ResnetBlock2D,
+    pub(crate) conv: Option<CausalConv2d>,
 }
 
 impl DownsampleStage {
-    pub(crate) fn forward(&self, x: &Tensor) -> Tensor {
+    pub fn forward(&self, x: &Tensor) -> Tensor {
         let h = self.resblock.forward(x);
         match &self.conv {
             Some(c) => c.forward(&h, true),

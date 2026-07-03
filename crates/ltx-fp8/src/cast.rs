@@ -2,9 +2,7 @@ use tch::Tensor;
 
 /// Calculate FP8 weight with stochastic rounding.
 ///
-/// In production this calls the fused CUDA kernel (`fused_add_round_launch`).
-/// For CPU or when CUDA is unavailable, performs a simple add + clamp.
-///
+/// CPU implementation: simple add + clamp (no stochastic rounding on CPU).
 /// THE ONLY FP8 stochastic rounding cast in the LTX codebase.
 pub fn calculate_weight_float8(target: &Tensor, original: &Tensor) -> Tensor {
     // CPU fallback: simple add + clamp (no stochastic rounding on CPU)
