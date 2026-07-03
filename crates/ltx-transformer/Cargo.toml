@@ -10,7 +10,6 @@ ltx-attention = { path = "../ltx-attention" }
 ltx-timestep = { path = "../ltx-timestep" }
 ltx-patchify = { path = "../ltx-patchify" }
 tch = { workspace = true }
-serde = { workspace = true }
 
 [lints]
 workspace = true

@@ -5,7 +5,7 @@ use tch::Tensor;
 
 use ltx_attention::SimpleAttnBlock;
 use ltx_conv::{CausalConv2d, CausalityAxis};
-use ltx_norm::group_norm::GroupNorm;
+use ltx_norm::GroupNorm;
 use ltx_resblock::ResnetBlock2D;
 use ltx_types::{NormLayerType, VAE_NORM_NUM_GROUPS};
 

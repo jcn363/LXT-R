@@ -47,8 +47,6 @@ pub struct Gemma3Attention {
     num_heads: i64,
     num_kv_heads: i64,
     head_dim: i64,
-    #[allow(dead_code)]
-    rope_theta: f64,
 }
 
 impl Gemma3Attention {
@@ -70,7 +68,6 @@ impl Gemma3Attention {
             num_heads: config.num_attention_heads,
             num_kv_heads: config.num_key_value_heads,
             head_dim: config.head_dim,
-            rope_theta: config.rope_theta,
         }
     }
 

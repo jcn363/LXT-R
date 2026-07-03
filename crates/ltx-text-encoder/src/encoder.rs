@@ -18,7 +18,6 @@ pub struct GemmaTextEncoder {
     embeddings_processor: EmbeddingsProcessor,
     embeddings_connector: EmbeddingsConnector,
     prompt_enhancer: PromptEnhancer,
-    #[allow(dead_code)]
     max_text_length: i64,
 }
 
@@ -105,5 +104,9 @@ impl GemmaTextEncoder {
 
     pub fn hidden_size(&self) -> i64 {
         self.text_model.hidden_size()
+    }
+
+    pub fn max_text_length(&self) -> i64 {
+        self.max_text_length
     }
 }

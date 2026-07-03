@@ -8,7 +8,6 @@ ltx-types = { path = "../ltx-types" }
 ltx-fp8 = { path = "../ltx-fp8" }
 tch = { workspace = true }
 safetensors = { workspace = true }
-serde = { workspace = true }
 
 [lints]
 workspace = true

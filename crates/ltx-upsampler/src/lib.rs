@@ -29,6 +29,7 @@ pub use rational_resampler::SpatialRationalResampler;
 /// shared primitives (`ltx_conv`, `ltx_norm`, `ltx_resblock`) —
 /// no reimplementation.
 pub struct LatentUpsampler {
+    // VarStore must be kept alive to own the parameters; never read directly.
     #[allow(dead_code)]
     vs: tch::nn::VarStore,
     conv_in: Box<dyn ModuleT>,

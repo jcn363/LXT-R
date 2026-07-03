@@ -128,7 +128,6 @@ pub struct SigLIPVisionTower {
     post_layernorm: RMSNorm,
     hidden_size: i64,
     patch_size: i64,
-    image_size: i64,
 }
 
 impl SigLIPVisionTower {
@@ -160,7 +159,6 @@ impl SigLIPVisionTower {
             post_layernorm: RMSNorm::new(config.hidden_size, NORM_EPS, device),
             hidden_size: config.hidden_size,
             patch_size: config.patch_size,
-            image_size: config.image_size,
         }
     }
 
@@ -202,11 +200,5 @@ impl SigLIPVisionTower {
 
     pub fn hidden_size(&self) -> i64 {
         self.hidden_size
-    }
-
-    #[allow(dead_code)]
-    pub fn num_patches(&self) -> i64 {
-        let grid = self.image_size / self.patch_size;
-        grid * grid
     }
 }
