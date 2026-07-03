@@ -26,11 +26,13 @@ Before merging, verify:
 
 ## Testing
 
-Each shared primitive should have tests in `crates/<name>/tests/` with golden `.npz` files from Python for numerical comparison.
+Run all tests with:
 
 ```bash
 cargo test --workspace
 ```
+
+Note: Golden test infrastructure (`.npz` comparison tests) is planned but not yet implemented. Currently, tests verify structural correctness (compilation, type checking) rather than numerical equivalence against a Python reference.
 
 ## Commit Messages
 

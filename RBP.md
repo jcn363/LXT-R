@@ -25,7 +25,6 @@ Before reviewing, familiarize yourself with Apollo's Rust best practices. Read A
 - Small `Copy` types (≤24 bytes) can be passed by value
 - Use `Cow<'_, T>` when ownership is ambiguous
 
-> **llama-rs notes:** The project uses `Arc<Model>` for shared ownership across threads and `RwLock` for read-mostly state (KV cache, tensor data cache). See `CODE_STYLE.md#Thread-Safety` for the concurrency model. The matmul backend passes `&[f32]` slices per the `&[T]` over `Vec<T>` rule — see `crates/ggml-cpu/src/matmul.rs:16-24`.
 
 ### Error Handling
 
@@ -34,7 +33,6 @@ Before reviewing, familiarize yourself with Apollo's Rust best practices. Read A
 - Use `thiserror` for library errors, `anyhow` for binaries only
 - Prefer `?` operator over match chains for error propagation
 
-> **llama-rs notes:** Follows this exactly. Library error enum at `crates/gguf/src/errors.rs` uses `#[derive(Error)]` with `GgufResult<T>` type alias. The project makes one deliberate exception: `expect("lock poisoned")` on `RwLock`/`Mutex` access is acceptable in library code since lock poisoning is unrecoverable — see `CODE_STYLE.md#Lock-Poisoning`.
 
 ### Performance
 
@@ -43,7 +41,6 @@ Before reviewing, familiarize yourself with Apollo's Rust best practices. Read A
 - Avoid cloning in loops; use `.iter()` instead of `.into_iter()` for Copy types
 - Prefer iterators over manual loops; avoid intermediate `.collect()` calls
 
-> **llama-rs notes:** Uses criterion with `black_box` — see `crates/ggml-cpu/benches/cpu_bench.rs`. The SIMD matmul uses a tiered fallback: AVX (8-wide) → SSE4.2 (4-wide) → scalar, with 4 accumulators per iteration for instruction-level parallelism (`crates/ggml-cpu/src/simd.rs:15`). Parallelism thresholds documented in `CODE_STYLE.md#Parallelism-Thresholds`: 64 rows minimum for parallel matmul, 1024 elements for vector ops.
 
 ### Linting
 
@@ -57,7 +54,6 @@ Key lints to watch:
 
 Use `#[expect(clippy::lint)]` over `#[allow(...)]` with justification comment.
 
-> **llama-rs notes:** The workspace uses: `cargo clippy --workspace -- -D warnings`. There is no workspace-level lint config — only `ggml-cuda` enables `#![deny(clippy::pedantic)]` at the crate level. See `CODE_STYLE.md#Clippy-Linting`. Uses `#[expect(dead_code)]` over `#[allow(dead_code)]` per the modern convention.
 
 ### Testing
 
@@ -66,7 +62,6 @@ Use `#[expect(clippy::lint)]` over `#[allow(...)]` with justification comment.
 - Use doc tests (`///`) for public API examples
 - Consider `cargo insta` for snapshot testing generated output
 
-> **llama-rs notes:** Uses `describe_should_expected_behavior` naming (e.g., `dot_f32_should_compute_correct_result`). Unit tests are inline under `#[cfg(test)] mod tests { ... }`, integration tests live in `crates/<name>/tests/<name>_test.rs`, benchmarks in `crates/<name>/benches/<name>.rs`. Tests requiring external model files skip gracefully without panicking — see `CODE_STYLE.md#Test-Patterns` and example at `crates/ggml-cpu/src/lib.rs`. Benchmark harness is criterion — see `crates/ggml-cpu/benches/cpu_bench.rs`.
 
 ### Generics & Dispatch
 
@@ -74,7 +69,6 @@ Use `#[expect(clippy::lint)]` over `#[allow(...)]` with justification comment.
 - Use `dyn Trait` only when heterogeneous collections are needed
 - Box at API boundaries, not internally
 
-> **llama-rs notes:** The project uses concrete types (`Tensor`, `DType`, `Graph` in `ggml/`) rather than generic abstractions. The two backends (`CpuBackend`, `CudaBackend`) are separate structs, not a shared trait — kept intentionally simple. The SIMD dot product uses `#[inline]` and const generics for step sizes (`AVX_F32_STEP`, `SSE_F32_STEP`) — see `crates/ggml-cpu/src/simd.rs:17-23`.
 
 ### Type State Pattern
 
@@ -97,7 +91,6 @@ impl Connection<Connected> {
 - Every `TODO` needs a linked issue: `// TODO(#42): ...`
 - Enable `#![deny(missing_docs)]` for libraries
 
-> **llama-rs notes:** Every `unsafe` block must have a `// SAFETY:` comment. The project uses ASCII section separators (`// ─── Section ────────────`) to visually organize files — see `CODE_STYLE.md#Section-Separators`. The `#[must_use]` attribute is used on pure accessors (`is_available()`, `total_vram()`). Crate-level docs (`//!`) are present in all `lib.rs` files.
 
 ---
 
@@ -146,7 +139,6 @@ The Rust Library Team maintains a comprehensive set of API design guidelines. Ke
 - Destructors must never fail; provide a separate `close()` method that returns `Result` ([C-DTOR-FAIL])
 - Destructors should not block; provide explicit shutdown methods ([C-DTOR-BLOCK])
 
-> **llama-rs notes:** The project uses `assert_eq!` with explicit shape error messages for argument validation (e.g., `matmul.rs:25-27`). Rust API Guidelines naming: conversion methods use `as_`/`to_`/`into_` prefixes. Feature gate uses the simple syntax: `cuda = ["cudarc"]` (not `dep:` prefix). The `GgufError` type implements `std::error::Error` via `thiserror` and is `Send + Sync + 'static`. See `ARCHITECTURE.md#Core-Components` for the full crate breakdown.
 
 ### A.2 Cargo & Workspace Management
 
@@ -168,7 +160,6 @@ The Rust Library Team maintains a comprehensive set of API design guidelines. Ke
 - Test with `--no-default-features` in CI to catch breakage.
 - Document available features at the crate level (`//!` in `lib.rs`) or in README.
 
-> **llama-rs notes:** Workspace uses `resolver = "2"` (not `"3"`) despite edition 2024 — this is a deliberate choice for compatibility. Features follow the naming rule: `cuda` feature enables CUDA (`dep:cudarc` syntax). The `cuda` feature is now enabled by default (`default = ["cuda"]` in `ggml-cuda/Cargo.toml`). Workspace uses `[workspace.dependencies]` and `[workspace.package]` for shared configuration — see `Cargo.toml`. Note: no `[workspace.lints]` section; lint config is per-crate.
 
 **Profiles & Build Optimization**
 - Use `lto = "thin"` for most release builds; `lto = "fat"` for final distribution builds.
@@ -176,9 +167,7 @@ The Rust Library Team maintains a comprehensive set of API design guidelines. Ke
 - Use `debug = 1` in release for line-number-only backtraces without full perf loss.
 - Configure `.cargo/config.toml` for target-specific settings, network timeouts, and build parallelization.
 
-> **llama-rs notes:** Release profile: `lto = true`, `panic = "abort"` (no explicit `opt-level`, `codegen-units`, or `strip`). See `Cargo.toml`. The `.cargo/config.toml` sets `target-cpu=bdver1` for AMD Opteron 3280 — see `CODE_STYLE.md`. No custom profiling profile defined (uses default release).
 
-> **llama-rs notes:** Crates are organized under `crates/` by domain following the recommended layout. Uses modern `submodule.rs` style (no `mod.rs`). Struct definitions placed in `lib.rs`, `impl` blocks in named files (`model.rs`, `reader.rs`) — see `CODE_STYLE.md#File-Organization`. Visibility follows narrowest-modifier rule: `pub(crate)` for internal utilities, `pub` only for intentional public API. Re-exports via `pub use` in `lib.rs` decouple file structure from API surface.
 
 ### A.3 Module Organization & Visibility
 
@@ -209,7 +198,6 @@ src/
 
 ### A.4 Async & Concurrency (Tokio Ecosystem)
 
-> **llama-rs notes:** The `llama-server` binary uses axum + tokio for the HTTP API (`GET /health`, `POST /completion` with SSE streaming). Server code in `crates/llama-server/src/main.rs`. For CPU parallelism, the project uses `std::thread::scope` (not `tokio::task`) in the matmul backend for raw pointer access — see `crates/ggml-cpu/src/matmul.rs:41-50`. Data-parallel operations (dequantization, tensor loading) use `rayon`. The inference engine (`crates/llama/src/`) is synchronous — async only enters at the HTTP server layer. See `ARCHITECTURE.md#5.-llama---Inference-Engine`.
 
 **Runtime Choice**
 - Tokio is the de-facto standard async runtime (2025+); async-std is in maintenance mode.
@@ -253,7 +241,6 @@ src/
 - All `unsafe` code must be hardened against adversarial closures, misbehaving `Deref`/`Clone`/`Drop` impls.
 - Run Miri on all unsafe code paths; use `cargo fuzz` with sanitizers for FFI targets.
 
-> **llama-rs notes:** The project uses `unsafe` primarily for SIMD intrinsics (AVX/SSE4.2) in `crates/ggml-cpu/src/simd.rs` and for raw pointer access in the matmul threadpool. Every `unsafe` block has a `// SAFETY:` comment. Unsafe is encapsulated behind safe public APIs (`dot_f32`, `matmul_f32`). No `unsafe fn` declarations — all unsafe blocks are local. See `CODE_STYLE.md#Do's-and-Don'ts`.
 
 **The Three Rules of Sound Unsafe**
 1. **Document invariants** — every `// SAFETY:` comment explains why the operation is valid.
@@ -270,7 +257,6 @@ src/
 - Prevent panics from crossing FFI boundaries (`catch_unwind` before the boundary).
 - Never use empty enums as FFI types (compiler treats them as uninhabited → UB).
 
-> **llama-rs notes:** Test naming follows `describe_should_expected_behavior`. Unit tests are inline in `#[cfg(test)] mod tests` blocks. Integration tests in `crates/<name>/tests/<name>_test.rs`. Benchmarks use criterion in `crates/<name>/benches/<name>.rs` — see `crates/ggml-cpu/benches/cpu_bench.rs` and `crates/llama/benches/profiling.rs`. Tests requiring model files skip gracefully (check `model_path.exists()`). See `CODE_STYLE.md#Testing` for full patterns.
 
 ### A.6 Testing Ecosystem
 
@@ -313,7 +299,6 @@ proptest! {
 - Test error paths and panic conditions (`#[should_panic]` + `#[should_panic(expected = "...")]`).
 - Use `#[cfg(test)]` to exclude test-only helpers from production builds.
 
-> **llama-rs notes:** All external dependencies are declared in `[workspace.dependencies]` for version consistency. Uses `cargo deny` for license compliance — policy at `deny.toml` allows MIT, Apache-2.0, and Unlicense only. Internal crates use `path = "crates/<name>"` references. Version specs use caret (default, e.g., `"1.5"`). The `Cargo.lock` is committed (application workspace). See `Cargo.toml` for the full dependency list.
 
 ### A.7 Dependency Management & SemVer
 
@@ -338,7 +323,6 @@ proptest! {
 - Be conservative with pre-release dependencies in published libraries.
 - Follow **minimum necessary versions**: prefer well-known crates for complex functionality, but don't depend on a crate for a single function you could write yourself.
 
-> **llama-rs notes:** Crate-level `//!` docs present in all `lib.rs` files. All `Cargo.toml` files include `description`, `version`, `edition`, `rust-version`, `license`, `repository`. The workspace uses `[workspace.package]` for shared metadata. Changelog not yet maintained. All crates are unpublished (path-only workspace). See `CODE_STYLE.md#Do's-and-Don'ts` for doc conventions.
 
 ### A.8 Documentation & Metadata
 
