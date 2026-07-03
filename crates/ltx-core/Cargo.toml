@@ -1,0 +1,28 @@
+[package]
+name = "ltx-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ltx-types = { path = "../ltx-types" }
+ltx-norm = { path = "../ltx-norm" }
+ltx-attention = { path = "../ltx-attention" }
+ltx-conv = { path = "../ltx-conv" }
+ltx-resblock = { path = "../ltx-resblock" }
+ltx-timestep = { path = "../ltx-timestep" }
+ltx-patchify = { path = "../ltx-patchify" }
+ltx-fp8 = { path = "../ltx-fp8" }
+ltx-components = { path = "../ltx-components" }
+ltx-conditioning = { path = "../ltx-conditioning" }
+ltx-guidance = { path = "../ltx-guidance" }
+ltx-transformer = { path = "../ltx-transformer" }
+ltx-video-vae = { path = "../ltx-video-vae" }
+ltx-audio-vae = { path = "../ltx-audio-vae" }
+ltx-upsampler = { path = "../ltx-upsampler" }
+ltx-text-encoder = { path = "../ltx-text-encoder" }
+ltx-loader = { path = "../ltx-loader" }
+ltx-quantization = { path = "../ltx-quantization" }
+tch = { workspace = true }
+
+[lints]
+workspace = true

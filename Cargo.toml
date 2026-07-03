@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ltx-types",
+    "crates/ltx-norm",
+    "crates/ltx-attention",
+    "crates/ltx-conv",
+    "crates/ltx-resblock",
+    "crates/ltx-timestep",
+    "crates/ltx-patchify",
+    "crates/ltx-fp8",
+    "crates/ltx-components",
+    "crates/ltx-conditioning",
+    "crates/ltx-guidance",
+    "crates/ltx-transformer",
+    "crates/ltx-video-vae",
+    "crates/ltx-audio-vae",
+    "crates/ltx-upsampler",
+    "crates/ltx-text-encoder",
+    "crates/ltx-loader",
+    "crates/ltx-quantization",
+    "crates/ltx-core",
+]
+
+[workspace.dependencies]
+tch = { version = "0.16.0", features = ["download-libtorch"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+safetensors = "0.4"
+tokenizers = "0.19"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

@@ -1,0 +1,15 @@
+[package]
+name = "ltx-upsampler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ltx-types = { path = "../ltx-types" }
+ltx-norm = { path = "../ltx-norm" }
+ltx-conv = { path = "../ltx-conv" }
+ltx-resblock = { path = "../ltx-resblock" }
+tch = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

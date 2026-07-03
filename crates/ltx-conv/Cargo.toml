@@ -1,0 +1,11 @@
+[package]
+name = "ltx-conv"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ltx-types = { path = "../ltx-types" }
+tch = { workspace = true }
+
+[lints]
+workspace = true

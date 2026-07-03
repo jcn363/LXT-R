@@ -1,0 +1,16 @@
+[package]
+name = "ltx-video-vae"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ltx-types = { path = "../ltx-types" }
+ltx-norm = { path = "../ltx-norm" }
+ltx-conv = { path = "../ltx-conv" }
+ltx-resblock = { path = "../ltx-resblock" }
+ltx-patchify = { path = "../ltx-patchify" }
+tch = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

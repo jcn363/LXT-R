@@ -1,0 +1,13 @@
+[package]
+name = "ltx-resblock"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ltx-types = { path = "../ltx-types" }
+ltx-conv = { path = "../ltx-conv" }
+ltx-norm = { path = "../ltx-norm" }
+tch = { workspace = true }
+
+[lints]
+workspace = true
