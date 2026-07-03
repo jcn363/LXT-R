@@ -17,7 +17,6 @@ pub struct GemmaTextEncoder {
     image_processor: ImageProcessor,
     embeddings_processor: EmbeddingsProcessor,
     embeddings_connector: EmbeddingsConnector,
-    #[allow(dead_code)]
     prompt_enhancer: PromptEnhancer,
     #[allow(dead_code)]
     max_text_length: i64,

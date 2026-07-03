@@ -41,7 +41,7 @@ impl CublasFp8Handle {
         _scale_b: f32,
         _out: tch::Kind,
     ) -> Tensor {
-        todo!("cuBLAS FP8 GEMM — requires CUDA toolchain")
+        unimplemented!("cuBLAS FP8 GEMM — requires CUDA toolchain")
     }
 }
 

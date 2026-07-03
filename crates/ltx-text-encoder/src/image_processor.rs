@@ -1,6 +1,5 @@
 /// Preprocesses images for SigLIP: normalize to [-1, 1] range.
 pub struct ImageProcessor {
-    #[allow(dead_code)]
     image_size: i64,
     mean: [f64; 3],
     std: [f64; 3],

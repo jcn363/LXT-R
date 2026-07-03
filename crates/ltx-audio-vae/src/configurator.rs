@@ -118,12 +118,14 @@ impl AudioEncoder {
             );
 
             let conv = if i < num_stages - 1 {
-                Some(CausalConv2d::new(
+                Some(CausalConv2d::new_with_axes(
                     vs / format!("down_{i}") / "downsample",
                     out_ch,
                     out_ch,
-                    4,
-                    2,
+                    4,  // kernel_time
+                    1,  // kernel_freq
+                    2,  // stride_time
+                    1,  // stride_freq
                     CausalityAxis::Time,
                 ))
             } else {
@@ -244,20 +246,18 @@ impl AudioDecoder {
             let out_ch = if i + 1 < num_stages {
                 config.decoder_channels[i + 1]
             } else {
-                last_ch / 2
+                last_ch
             };
 
-            let conv = ltx_conv::make_conv_nd(
+            let conv: Box<dyn ModuleT> = Box::new(ltx_conv::AsymConvTranspose2d::new(
                 vs / format!("up_{i}") / "upsample",
-                2,
                 in_ch,
                 out_ch,
-                4,
-                2,
-                1,
-                false,
-                "zeros",
-            );
+                4,  // kernel_time
+                1,  // kernel_freq
+                2,  // stride_time
+                1,  // stride_freq
+            ));
 
             let resblock = ResnetBlock2D::new(
                 vs / format!("up_{i}") / "resblock",

@@ -27,6 +27,7 @@ impl SingleGPUModelBuilder {
     }
 
     /// Load a state dict from a file path, auto-detecting format.
+    #[must_use = "caller must handle checkpoint load error"]
     pub fn load_state_dict(&self, path: &Path) -> Result<StateDict, Box<dyn std::error::Error>> {
         let ext = path.extension()
             .and_then(|e| e.to_str())

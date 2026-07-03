@@ -14,13 +14,14 @@ pub fn dequantize_fp8(weight: &Tensor, scale: &Tensor, target: tch::Kind) -> Ten
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ltx_types::{FP8_MAX, FP8_MIN};
 
     #[test]
     fn test_dequantize_recovers_original() {
         let original = Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]);
         let scale = Tensor::from_slice(&[0.5f32]);
         let inv_scale = Tensor::from_slice(&[2.0f32]); // 1.0 / 0.5
-        let quantized = (&original * &scale).clamp(-448.0, 448.0);
+        let quantized = (&original * &scale).clamp(FP8_MIN, FP8_MAX);
 
         let recovered = dequantize_fp8(&quantized, &inv_scale, tch::Kind::Float);
         assert!(original.allclose(&recovered, 1e-6, 1e-6, false));

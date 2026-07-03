@@ -124,6 +124,7 @@ pub fn trapezoidal_mask(
 ///
 /// Returns `Ok(())` if overlaps meet minimums, or an error message listing
 /// which constraints are violated.
+#[must_use = "caller must handle validation error"]
 pub fn validate_tiling_config(config: &TilingConfig) -> Result<(), String> {
     let mut errors = Vec::new();
 

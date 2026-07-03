@@ -86,7 +86,7 @@ impl Vocoder {
             let cfg = tch::nn::ConvTransposeConfig {
                 stride: 2,
                 padding: 1,
-                output_padding: 1,
+                output_padding: 0,
                 groups: 1,
                 bias: true,
                 dilation: 1,

@@ -8,11 +8,13 @@ pub struct LTXVGemmaTokenizer {
 pub type TokenizerError = Box<dyn std::error::Error + Send + Sync>;
 
 impl LTXVGemmaTokenizer {
+    #[must_use = "caller must handle tokenizer error"]
     pub fn from_file(path: &str, max_length: usize) -> Result<Self, TokenizerError> {
         let tokenizer = Tokenizer::from_file(path)?;
         Ok(Self { tokenizer, max_length })
     }
 
+    #[must_use = "caller must handle tokenization error"]
     pub fn encode(&self, text: &str) -> Result<Vec<i64>, TokenizerError> {
         let encoding = self.tokenizer.encode(text, true)?;
         let mut ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
@@ -20,6 +22,7 @@ impl LTXVGemmaTokenizer {
         Ok(ids)
     }
 
+    #[must_use = "caller must handle batch tokenization error"]
     pub fn encode_batch(&self, texts: &[&str]) -> Result<Vec<Vec<i64>>, TokenizerError> {
         texts.iter().map(|t| self.encode(t)).collect()
     }

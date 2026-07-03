@@ -2,12 +2,11 @@ use std::borrow::Borrow;
 use tch::nn::{ModuleT, Path};
 use tch::Tensor;
 
-use ltx_conv::make_conv_nd;
+use ltx_conv::AsymConvTranspose2d;
 use ltx_resblock::ResnetBlock2D;
 use ltx_types::NormLayerType;
 
 /// A single upsampling stage: ConvTranspose2d → ResnetBlock2D.
-#[allow(dead_code)]
 pub struct UpsampleStage {
     conv: Box<dyn ModuleT>,
     resblock: ResnetBlock2D,
@@ -45,20 +44,16 @@ pub fn build_upsampling_path<'a>(
         let in_ch = channels[i];
         let out_ch = if i + 1 < num_stages { channels[i + 1] } else { channels[i] / 2 };
 
-        // ConvTranspose2d via make_conv_nd with dims=2, kernel=4, stride=2
-        // We use padding=1 so output_size = (input_size - 1) * stride - 2*padding + kernel
-        //                                = (input_size - 1) * 2 - 2 + 4 = input_size * 2
-        let conv = make_conv_nd(
+        // ConvTranspose2d: only upsample along Time, preserve Freq
+        let conv: Box<dyn ModuleT> = Box::new(AsymConvTranspose2d::new(
             vs / format!("upsample_{i}"),
-            2,        // dims
             in_ch,    // in_channels
             out_ch,   // out_channels
-            4,        // kernel_size
-            2,        // stride (doubles time dim)
-            1,        // padding
-            false,    // causal
-            "zeros",  // spatial_padding
-        );
+            4,        // kernel_time (upsamples time dim)
+            1,        // kernel_freq (no change to freq dim)
+            2,        // stride_time (doubles time dim)
+            1,        // stride_freq (preserve freq dim)
+        ));
 
         let resblock = ResnetBlock2D::new(
             vs / format!("resblock_{i}"),

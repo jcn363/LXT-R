@@ -3,6 +3,7 @@ use tch::nn::ModuleT;
 use tch::Tensor;
 
 use ltx_norm::RMSNorm;
+use ltx_types::NORM_EPS;
 
 pub struct EmbeddingsProcessor {
     projection: Linear,
@@ -20,7 +21,7 @@ impl EmbeddingsProcessor {
         };
         Self {
             projection: tch::nn::linear(&root / "projection", input_size, hidden_size, linear_cfg),
-            norm: RMSNorm::new(hidden_size, 1e-6, tch::Device::Cpu),
+            norm: RMSNorm::new(hidden_size, NORM_EPS, tch::Device::Cpu),
             hidden_size,
         }
     }

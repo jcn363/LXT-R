@@ -1,8 +1,11 @@
+use ltx_types::{NORM_EPS, ROPE_THETA};
+
 use crate::config::LTXVTextEncoderConfig;
 use crate::encoder::GemmaTextEncoder;
 use crate::tokenizer::LTXVGemmaTokenizer;
 
 /// Build a GemmaTextEncoder from configuration data.
+#[must_use = "caller must handle encoder build error"]
 pub fn from_config(
     config: &LTXVTextEncoderConfig,
     tokenizer_path: &str,
@@ -23,9 +26,9 @@ pub fn default_config() -> LTXVTextEncoderConfig {
             head_dim: 256,
             num_hidden_layers: 48,
             vocab_size: 262144,
-            rms_norm_eps: 1e-6,
+            rms_norm_eps: NORM_EPS,
             hidden_act: String::from("gelu_pytorch_tanh"),
-            rope_theta: 10000.0,
+            rope_theta: ROPE_THETA,
             max_position_embeddings: 131072,
         },
         siglip: crate::config::SigLIPConfigData {

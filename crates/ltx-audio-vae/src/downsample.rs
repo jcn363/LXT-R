@@ -7,7 +7,6 @@ use ltx_resblock::ResnetBlock2D;
 use ltx_types::NormLayerType;
 
 /// A single downsampling stage: ResnetBlock2D → optional CausalConv2d stride-2.
-#[allow(dead_code)]
 pub struct DownsampleStage {
     resblock: ResnetBlock2D,
     conv: Option<CausalConv2d>,
@@ -53,12 +52,14 @@ pub fn build_downsampling_path<'a>(
             ResnetBlock2D::new(vs / format!("resblock_{i}"), in_ch, out_ch, norm_type, norm_groups, true);
 
         let conv = if i < num_stages - 1 {
-            Some(CausalConv2d::new(
+            Some(CausalConv2d::new_with_axes(
                 vs / format!("downsample_{i}"),
                 out_ch,
                 out_ch,
-                4,
-                2,
+                4,  // kernel_time (strided)
+                1,  // kernel_freq (no downsampling)
+                2,  // stride_time (halves time dim)
+                1,  // stride_freq (preserve freq dim)
                 ltx_conv::CausalityAxis::Time,
             ))
         } else {

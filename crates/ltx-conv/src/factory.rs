@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use tch::nn::Path;
+use tch::Tensor;
 
 use crate::causal_conv2d::{CausalConv2d, CausalityAxis};
 use crate::causal_conv3d::CausalConv3d;
@@ -74,6 +75,90 @@ pub fn make_causal_conv2d<'a>(
     causal_axis: CausalityAxis,
 ) -> CausalConv2d {
     CausalConv2d::new(vs, in_channels, out_channels, kernel_size, stride, causal_axis)
+}
+
+/// Create a 2D transposed convolution (ConvTranspose2d) for upsampling.
+pub fn make_conv_transpose2d<'a>(
+    vs: impl Borrow<Path<'a>>,
+    in_channels: i64,
+    out_channels: i64,
+    kernel_size: i64,
+    stride: i64,
+    padding: i64,
+) -> tch::nn::ConvTranspose2D {
+    tch::nn::conv_transpose2d(
+        vs,
+        in_channels,
+        out_channels,
+        kernel_size,
+        tch::nn::ConvTransposeConfig {
+            stride,
+            padding,
+            ..Default::default()
+        },
+    )
+}
+
+/// Raw asymmetric transposed conv2d that only upsamples along one axis.
+///
+/// `kernel_time` / `stride_time` — kernel and stride along the time (height) axis.
+/// `kernel_freq` / `stride_freq` — kernel and stride along the freq (width) axis.
+/// Use kernel_freq=1, stride_freq=1 to keep the freq dimension unchanged.
+pub struct AsymConvTranspose2d {
+    weight: Tensor,
+    bias: Tensor,
+    stride: [i64; 2],
+    padding: [i64; 2],
+    output_padding: [i64; 2],
+}
+
+impl std::fmt::Debug for AsymConvTranspose2d {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AsymConvTranspose2d")
+            .field("stride", &self.stride)
+            .field("padding", &self.padding)
+            .finish()
+    }
+}
+
+impl AsymConvTranspose2d {
+    pub fn new<'a>(
+        vs: impl Borrow<Path<'a>>,
+        in_channels: i64,
+        out_channels: i64,
+        kernel_time: i64,
+        kernel_freq: i64,
+        stride_time: i64,
+        stride_freq: i64,
+    ) -> Self {
+        let vs = vs.borrow();
+        let fan_in = in_channels * kernel_time * kernel_freq;
+        let std = (2.0 / fan_in as f64).sqrt();
+        // Weight shape for transposed conv: [in_channels, out_channels, kH, kW]
+        let weight = vs.var("weight", &[in_channels, out_channels, kernel_time, kernel_freq], tch::nn::init::Init::Randn { mean: 0.0, stdev: std });
+        let bias = vs.var("bias", &[out_channels], tch::nn::init::Init::Const(0.0));
+        Self {
+            weight,
+            bias,
+            stride: [stride_time, stride_freq],
+            padding: [(kernel_time - 1) / 2, (kernel_freq - 1) / 2],
+            output_padding: [0, 0],
+        }
+    }
+}
+
+impl tch::nn::ModuleT for AsymConvTranspose2d {
+    fn forward_t(&self, xs: &Tensor, _train: bool) -> Tensor {
+        xs.conv_transpose2d(
+            &self.weight,
+            Some(&self.bias),
+            self.stride,
+            self.padding,
+            self.output_padding,
+            1,      // groups
+            [1, 1], // dilation
+        )
+    }
 }
 
 /// Create a `DualConv3d` (factorised 2D+1D) convolution.

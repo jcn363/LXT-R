@@ -4,6 +4,7 @@ use tch::Tensor;
 
 use ltx_attention::scaled_dot_product_attention;
 use ltx_norm::RMSNorm;
+use ltx_types::NORM_EPS;
 
 use crate::config::SigLIPConfigData;
 
@@ -98,12 +99,11 @@ pub struct SigLIPVisionBlock {
 
 impl SigLIPVisionBlock {
     fn new(config: &SigLIPConfigData) -> Self {
-        let eps = 1e-6;
         let device = tch::Device::Cpu;
         Self {
-            norm1: RMSNorm::new(config.hidden_size, eps, device),
+            norm1: RMSNorm::new(config.hidden_size, NORM_EPS, device),
             attn: SigLIPVisionAttention::new(config),
-            norm2: RMSNorm::new(config.hidden_size, eps, device),
+            norm2: RMSNorm::new(config.hidden_size, NORM_EPS, device),
             mlp: SigLIPVisionMLP::new(config),
         }
     }
@@ -157,7 +157,7 @@ impl SigLIPVisionTower {
             patch_embed_weight,
             position_embed_weight,
             layers,
-            post_layernorm: RMSNorm::new(config.hidden_size, 1e-6, device),
+            post_layernorm: RMSNorm::new(config.hidden_size, NORM_EPS, device),
             hidden_size: config.hidden_size,
             patch_size: config.patch_size,
             image_size: config.image_size,

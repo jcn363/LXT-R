@@ -63,11 +63,11 @@ impl ResnetBlock2D {
 
     pub fn forward(&self, x: &Tensor) -> Tensor {
         let h = leaky_relu(x, LRELU_SLOPE);
-        let h = self.conv1.forward(&h, true);
+        let h = self.conv1.forward(&h, false);
         let h = leaky_relu(&h, LRELU_SLOPE);
-        let h = self.conv2.forward(&h, true);
+        let h = self.conv2.forward(&h, false);
         match &self.shortcut {
-            Some(s) => x + s.forward_t(&h, true),
+            Some(s) => s.forward_t(x, true) + &h,
             None => x + &h,
         }
     }

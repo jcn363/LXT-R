@@ -40,6 +40,7 @@ impl StateDictRegistry {
     }
 
     /// Load a state dict by model name.
+    #[must_use = "caller must handle registry load error"]
     pub fn load(&self, name: &str) -> Result<StateDict, Box<dyn std::error::Error>> {
         let entry = self.entries.get(name)
             .ok_or_else(|| format!("Model '{}' not registered", name))?;

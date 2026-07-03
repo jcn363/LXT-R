@@ -50,7 +50,7 @@ mod tests {
     #[test]
     fn test_quantize_clamps_to_fp8_range() {
         // Create a tensor with values exceeding FP8 range
-        let w = Tensor::from_slice(&[-1000.0, -448.0, 0.0, 448.0, 1000.0]);
+        let w = Tensor::from_slice(&[-1000.0, FP8_MIN, 0.0, FP8_MAX, 1000.0]);
         let (q, _) = quantize_weight_to_fp8_per_tensor(&w);
         let q_f32 = q.to_kind(tch::Kind::Float);
 
