@@ -78,8 +78,8 @@ mod tests {
         let mask = padding_mask(&[3, 5, 2], tch::Device::Cpu);
         assert_eq!(mask.size(), vec![3, 5]);
         // First sequence has 3 valid positions
-        assert!(mask.get(0).get(2).bool_value());
-        assert!(!mask.get(0).get(3).bool_value());
+        assert_ne!(mask.get(0).get(2).double_value(&[]), 0.0);
+        assert_eq!(mask.get(0).get(3).double_value(&[]), 0.0);
     }
 
     #[test]

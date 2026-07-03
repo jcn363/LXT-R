@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn test_euler_step_output_shape() {
-        let step = EulerStep::default();
+        let step = EulerStep;
         let x = Tensor::ones([1, 4, 8, 8], (tch::Kind::Float, Device::Cpu));
         let denoised = Tensor::zeros([1, 4, 8, 8], (tch::Kind::Float, Device::Cpu));
         let result = step.step(&x, 0.5, 0.3, &denoised, tch::Kind::Float);
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_euler_step_reduces_noise() {
-        let step = EulerStep::default();
+        let step = EulerStep;
         let x = Tensor::ones([1, 4, 8, 8], (tch::Kind::Float, Device::Cpu));
         let denoised = Tensor::zeros([1, 4, 8, 8], (tch::Kind::Float, Device::Cpu));
         // Step from sigma=0.5 to sigma=0.3: should move toward denoised

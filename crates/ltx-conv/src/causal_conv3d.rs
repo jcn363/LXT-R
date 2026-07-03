@@ -54,7 +54,7 @@ impl CausalConv3d {
         if causal {
             let first_frame = x.narrow(2, 0, 1);
             let pad = first_frame.expand(
-                &[1, 1, self.time_kernel_size - 1, x.size()[3], x.size()[4]],
+                [1, 1, self.time_kernel_size - 1, x.size()[3], x.size()[4]],
                 true,
             );
             self.conv.forward(&Tensor::cat(&[&pad, x], 2))
@@ -62,10 +62,10 @@ impl CausalConv3d {
             let half = (self.time_kernel_size - 1) / 2;
             let first = x
                 .narrow(2, 0, 1)
-                .expand(&[1, 1, half, x.size()[3], x.size()[4]], true);
+                .expand([1, 1, half, x.size()[3], x.size()[4]], true);
             let last = x
                 .narrow(2, x.size()[2] - 1, 1)
-                .expand(&[1, 1, half, x.size()[3], x.size()[4]], true);
+                .expand([1, 1, half, x.size()[3], x.size()[4]], true);
             self.conv.forward(&Tensor::cat(&[&first, x, &last], 2))
         }
     }

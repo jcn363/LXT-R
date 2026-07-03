@@ -2,6 +2,12 @@ use tch::Tensor;
 
 pub struct EmbeddingsConnector;
 
+impl Default for EmbeddingsConnector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EmbeddingsConnector {
     pub fn new() -> Self {
         Self
@@ -24,7 +30,7 @@ impl EmbeddingsConnector {
         device: tch::Device,
     ) -> Tensor {
         let total = text_len + vision_len;
-        let mask = Tensor::zeros(&[total, total], (tch::Kind::Bool, device));
+        let mask = Tensor::zeros([total, total], (tch::Kind::Bool, device));
 
         // Block vision tokens from attending to text and vice versa
         let _ = mask.narrow(0, 0, text_len)

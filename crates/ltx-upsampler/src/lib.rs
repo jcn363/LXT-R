@@ -47,6 +47,7 @@ impl std::fmt::Debug for LatentUpsampler {
 
 impl LatentUpsampler {
     /// Create a new LatentUpsampler on the given device.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         device: tch::Device,
         in_channels: i64,
@@ -70,6 +71,7 @@ impl LatentUpsampler {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new_at_path(
         vs: tch::nn::VarStore,
         in_channels: i64,

@@ -29,8 +29,8 @@ impl GroupNorm {
         let device = tch::Device::Cpu;
         let (weight, bias) = if affine {
             (
-                Some(Tensor::ones(&[num_channels], (tch::Kind::Float, device))),
-                Some(Tensor::zeros(&[num_channels], (tch::Kind::Float, device))),
+                Some(Tensor::ones([num_channels], (tch::Kind::Float, device))),
+                Some(Tensor::zeros([num_channels], (tch::Kind::Float, device))),
             )
         } else {
             (None, None)

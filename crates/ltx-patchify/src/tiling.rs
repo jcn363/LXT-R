@@ -105,7 +105,7 @@ pub fn trapezoidal_mask(
         let ramp = Tensor::arange(overlap_len, (tch::Kind::Float, tch::Device::Cpu))
             / overlap_len as f64;
         let left = weights.narrow(0, 0, overlap_len) * &ramp;
-        let _ = weights.narrow(0, 0, overlap_len).copy_(&left);
+        weights.narrow(0, 0, overlap_len).copy_(&left);
     }
 
     if !is_last && overlap_len > 0 {
@@ -114,7 +114,7 @@ pub fn trapezoidal_mask(
             - Tensor::arange(overlap_len, (tch::Kind::Float, tch::Device::Cpu))
                 / overlap_len as f64;
         let right = weights.narrow(0, start, overlap_len) * &ramp;
-        let _ = weights.narrow(0, start, overlap_len).copy_(&right);
+        weights.narrow(0, start, overlap_len).copy_(&right);
     }
 
     weights

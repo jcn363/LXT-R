@@ -71,13 +71,13 @@ impl CausalConv2d {
                 CausalityAxis::Time => {
                     let first = x
                         .narrow(2, 0, 1)
-                        .expand(&[1, 1, pad_size, x.size()[3]], true);
+                        .expand([1, 1, pad_size, x.size()[3]], true);
                     self.conv.forward(&Tensor::cat(&[&first, x], 2))
                 }
                 CausalityAxis::Width => {
                     let first = x
                         .narrow(3, 0, 1)
-                        .expand(&[1, 1, x.size()[2], pad_size], true);
+                        .expand([1, 1, x.size()[2], pad_size], true);
                     self.conv.forward(&Tensor::cat(&[&first, x], 3))
                 }
                 CausalityAxis::None => self.conv.forward(x),

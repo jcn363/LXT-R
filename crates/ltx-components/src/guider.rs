@@ -141,7 +141,7 @@ impl Guider for MultiModal {
     fn guide(&self, x: &Tensor, uncond: &Tensor) -> Tensor {
         let mut result = uncond.zeros_like();
         for (guider, weight) in self.guiders.iter().zip(&self.weights) {
-            result = result + guider.guide(x, uncond) * *weight;
+            result += guider.guide(x, uncond) * *weight;
         }
         result
     }

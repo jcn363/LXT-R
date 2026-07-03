@@ -61,7 +61,7 @@ fn apply_interleaved(x: &Tensor, cos: &Tensor, sin: &Tensor) -> Tensor {
     let t_dup = x.reshape(&shape);
     let t1 = t_dup.narrow(-1, 0, 1);
     let t2 = t_dup.narrow(-1, 1, 1);
-    let t_rot = Tensor::stack(&[&(-t2), &t1], -1).reshape(&x.size());
+    let t_rot = Tensor::stack(&[&(-t2), &t1], -1).reshape(x.size());
     x * cos + t_rot * sin
 }
 

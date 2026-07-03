@@ -18,6 +18,7 @@ use crate::dual_conv3d::DualConv3d;
 /// * `causal` — whether to use causal (left-only) temporal padding.
 /// * `spatial_padding` — `"replicate"` / `"reflect"` / `"zeros"` (currently
 ///   only `"zeros"` is wired through; extend as needed).
+#[allow(clippy::too_many_arguments)]
 pub fn make_conv_nd<'a>(
     vs: impl Borrow<Path<'a>>,
     dims: i64,

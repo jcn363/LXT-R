@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Planning repo for the Rust rewrite of LTX-2.3 core. No source code yet — `PLAN.md` is the single source of truth for architecture, crate layout, and implementation order.
+Planning repo for the Rust rewrite of LTX-2.3 core. `PLAN.md` is the single source of truth for architecture, crate layout, and implementation order.
 
 ## Core Principle: SSOT
 
@@ -69,7 +69,7 @@ cargo clippy --all-targets -- -D warnings -D clippy::all
 - Import from `ltx_*` crate root, never internal submodules (except explicit re-exports)
 - Each shared crate has a `factory.rs` — use it to instantiate modules, never construct directly
 - Tests go in each crate's `tests/` dir with golden `.npz` files from Python for numerical comparison
-- 19 crates, 106 files, ~7,500 LOC
+- 19 crates, 106 files, ~7,570 LOC
 - Workspace root: `Cargo.toml` at repo root, all crates under `crates/`
 
 ## Gotchas

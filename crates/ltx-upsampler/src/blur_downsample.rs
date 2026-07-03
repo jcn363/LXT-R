@@ -95,7 +95,7 @@ impl BlurDownsample {
         let gaussian = Self::make_gaussian_kernel_4d(k, c);
         let groups = c;
         let blurred =
-            tch::Tensor::conv2d(x, &gaussian, None::<&Tensor>, &[1, 1], &[1, 1], &[1, 1], groups);
+            tch::Tensor::conv2d(x, &gaussian, None::<&Tensor>, [1, 1], [1, 1], [1, 1], groups);
 
         // Strided conv with learnable weights
         self.conv.forward_t(&blurred, false)
@@ -132,7 +132,7 @@ impl BlurDownsample {
         let kernel_2d = Self::make_gaussian_kernel(size);
         kernel_2d
             .reshape([1, 1, size, size])
-            .repeat(&[channels, 1, 1, 1])
+            .repeat([channels, 1, 1, 1])
     }
 }
 

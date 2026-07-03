@@ -84,16 +84,16 @@ impl DualConv3d {
         if causal {
             let first = h
                 .narrow(2, 0, 1)
-                .expand(&[1, 1, self.time_kernel_size - 1, h.size()[3], h.size()[4]], true);
+                .expand([1, 1, self.time_kernel_size - 1, h.size()[3], h.size()[4]], true);
             self.conv_temporal.forward(&Tensor::cat(&[&first, &h], 2))
         } else {
             let half = (self.time_kernel_size - 1) / 2;
             let first = h
                 .narrow(2, 0, 1)
-                .expand(&[1, 1, half, h.size()[3], h.size()[4]], true);
+                .expand([1, 1, half, h.size()[3], h.size()[4]], true);
             let last = h
                 .narrow(2, h.size()[2] - 1, 1)
-                .expand(&[1, 1, half, h.size()[3], h.size()[4]], true);
+                .expand([1, 1, half, h.size()[3], h.size()[4]], true);
             self.conv_temporal.forward(&Tensor::cat(&[&first, &h, &last], 2))
         }
     }

@@ -24,8 +24,8 @@ impl Gemma3MLP {
             ..Default::default()
         };
         Self {
-            gate_proj: tch::nn::linear(&root / "gate_proj", config.hidden_size, config.intermediate_size, linear_cfg.clone()),
-            up_proj: tch::nn::linear(&root / "up_proj", config.hidden_size, config.intermediate_size, linear_cfg.clone()),
+            gate_proj: tch::nn::linear(&root / "gate_proj", config.hidden_size, config.intermediate_size, linear_cfg),
+            up_proj: tch::nn::linear(&root / "up_proj", config.hidden_size, config.intermediate_size, linear_cfg),
             down_proj: tch::nn::linear(&root / "down_proj", config.intermediate_size, config.hidden_size, linear_cfg),
         }
     }
@@ -61,9 +61,9 @@ impl Gemma3Attention {
         };
         let device = tch::Device::Cpu;
         Self {
-            q_proj: tch::nn::linear(&root / "q_proj", config.hidden_size, config.num_attention_heads * config.head_dim, linear_cfg.clone()),
-            k_proj: tch::nn::linear(&root / "k_proj", config.hidden_size, config.num_key_value_heads * config.head_dim, linear_cfg.clone()),
-            v_proj: tch::nn::linear(&root / "v_proj", config.hidden_size, config.num_key_value_heads * config.head_dim, linear_cfg.clone()),
+            q_proj: tch::nn::linear(&root / "q_proj", config.hidden_size, config.num_attention_heads * config.head_dim, linear_cfg),
+            k_proj: tch::nn::linear(&root / "k_proj", config.hidden_size, config.num_key_value_heads * config.head_dim, linear_cfg),
+            v_proj: tch::nn::linear(&root / "v_proj", config.hidden_size, config.num_key_value_heads * config.head_dim, linear_cfg),
             o_proj: tch::nn::linear(&root / "o_proj", config.num_attention_heads * config.head_dim, config.hidden_size, linear_cfg),
             q_norm: RMSNorm::new(config.head_dim, config.rms_norm_eps, device),
             k_norm: RMSNorm::new(config.head_dim, config.rms_norm_eps, device),
@@ -154,7 +154,7 @@ impl Gemma3TextModel {
     pub fn new(config: &Gemma3ConfigData) -> Self {
         let device = tch::Device::Cpu;
         let embed_tokens_weight =
-            Tensor::randn(&[config.vocab_size, config.hidden_size], (tch::Kind::Float, device));
+            Tensor::randn([config.vocab_size, config.hidden_size], (tch::Kind::Float, device));
 
         let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
         for i in 0..config.num_hidden_layers {

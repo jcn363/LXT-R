@@ -13,6 +13,7 @@ pub fn patchify_5d(x: &Tensor, p1: i64, p2: i64, p3: i64) -> Tensor {
 }
 
 /// Unpatchify 5D video tensor back to `(B, C, F*p1, H*p2, W*p3)`.
+#[allow(clippy::too_many_arguments)]
 pub fn unpatchify_5d(
     x: &Tensor,
     b: i64,

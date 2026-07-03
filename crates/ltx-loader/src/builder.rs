@@ -69,6 +69,7 @@ impl Default for SingleGPUModelBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tch::Tensor;
 
     #[test]
     fn test_builder_cpu() {

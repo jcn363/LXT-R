@@ -3,6 +3,12 @@ pub struct PromptEnhancer {
     user_template: String,
 }
 
+impl Default for PromptEnhancer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PromptEnhancer {
     pub fn new() -> Self {
         Self {

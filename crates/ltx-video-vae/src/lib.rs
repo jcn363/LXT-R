@@ -40,6 +40,7 @@ impl std::fmt::Debug for VideoEncoder {
 }
 
 impl VideoEncoder {
+    #[allow(clippy::too_many_arguments)]
     pub fn new<'a>(
         vs: impl Borrow<Path<'a>>,
         in_channels: i64,
@@ -167,6 +168,7 @@ impl std::fmt::Debug for VideoDecoder {
 }
 
 impl VideoDecoder {
+    #[allow(clippy::too_many_arguments)]
     pub fn new<'a>(
         vs: impl Borrow<Path<'a>>,
         latent_channels: i64,
@@ -247,7 +249,7 @@ impl VideoDecoder {
     }
 
     pub fn forward(&self, x: &Tensor) -> Tensor {
-        let mut x = self.conv_in.forward_t(&x, false);
+        let mut x = self.conv_in.forward_t(x, false);
 
         x = self.mid.forward(&x);
 
@@ -290,6 +292,7 @@ impl std::fmt::Debug for VideoVAE {
 }
 
 impl VideoVAE {
+    #[allow(clippy::too_many_arguments)]
     pub fn new<'a>(
         vs: impl Borrow<Path<'a>>,
         in_channels: i64,

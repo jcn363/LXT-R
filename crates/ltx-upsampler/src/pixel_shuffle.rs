@@ -27,7 +27,7 @@ impl PixelShuffleND {
     pub fn new(upscale_factor: i64, num_spatial_dims: i64) -> Self {
         assert!(upscale_factor > 0, "upscale_factor must be positive");
         assert!(
-            num_spatial_dims >= 2 && num_spatial_dims <= 3,
+            (2..=3).contains(&num_spatial_dims),
             "num_spatial_dims must be 2 or 3"
         );
         Self {

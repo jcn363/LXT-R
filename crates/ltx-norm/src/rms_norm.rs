@@ -18,7 +18,7 @@ impl std::fmt::Debug for RMSNorm {
 impl RMSNorm {
     pub fn new(dim: i64, eps: f64, device: tch::Device) -> Self {
         Self {
-            weight: Tensor::ones(&[dim], (tch::Kind::Float, device)),
+            weight: Tensor::ones([dim], (tch::Kind::Float, device)),
             eps,
         }
     }

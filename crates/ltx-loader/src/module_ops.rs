@@ -21,7 +21,7 @@ impl ModuleOps {
         let mut report = LoadReport::default();
 
         // For each parameter in the state dict, try to assign it
-        for (name, _tensor) in state_dict {
+        for name in state_dict.keys() {
             // Attempt to set via named parameter
             // In tch-rs, parameters are accessed via var_store — we work with the state dict
             // and let the caller handle assignment via VarStore::load
@@ -79,6 +79,8 @@ pub struct LoadReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use tch::Tensor;
 
     #[test]
     fn test_match_parameters() {

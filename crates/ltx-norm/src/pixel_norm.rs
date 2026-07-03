@@ -13,13 +13,15 @@ impl std::fmt::Debug for PixelNorm {
     }
 }
 
+impl Default for PixelNorm {
+    fn default() -> Self {
+        Self { eps: NORM_EPS }
+    }
+}
+
 impl PixelNorm {
     pub fn new(eps: f64) -> Self {
         Self { eps }
-    }
-
-    pub fn default() -> Self {
-        Self { eps: NORM_EPS }
     }
 
     pub fn forward(&self, x: &Tensor) -> Tensor {

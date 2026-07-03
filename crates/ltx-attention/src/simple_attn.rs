@@ -32,9 +32,9 @@ impl SimpleAttnBlock {
         };
         Self {
             norm: tch::nn::group_norm(&root / "norm", 32, channels, gn_cfg),
-            q: tch::nn::conv2d(&root / "q", channels, channels, 1, conv_cfg.clone()),
-            k: tch::nn::conv2d(&root / "k", channels, channels, 1, conv_cfg.clone()),
-            v: tch::nn::conv2d(&root / "v", channels, channels, 1, conv_cfg.clone()),
+            q: tch::nn::conv2d(&root / "q", channels, channels, 1, conv_cfg),
+            k: tch::nn::conv2d(&root / "k", channels, channels, 1, conv_cfg),
+            v: tch::nn::conv2d(&root / "v", channels, channels, 1, conv_cfg),
             proj_out: tch::nn::conv2d(&root / "proj_out", channels, channels, 1, conv_cfg),
         }
     }
