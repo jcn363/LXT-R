@@ -1,12 +1,14 @@
-//! Standalone LTX-2.3 inference demo with random weights.
+//! Standalone LTX-2.3 inference demo.
 //!
 //! Demonstrates the full video diffusion pipeline:
-//! 1. Initialize model with random weights
+//! 1. Initialize model with random or loaded weights
 //! 2. Create noisy video latent
 //! 3. Run denoising loop with scheduler + transformer + CFG
 //! 4. Output denoised latent
 //!
-//! Usage: cargo run --bin ltx-inference [--steps N] [--video-size BxCxFxHxW]
+//! Usage:
+//!   cargo run --bin ltx-inference -- --steps 4
+//!   cargo run --bin ltx-inference -- --weights path/to/model.safetensors --steps 4
 
 use ltx_attention::RopeType;
 use ltx_components::{EulerStep, Ltx2Scheduler, CFG};
@@ -43,8 +45,16 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(4);
 
+    let weights_path = args.iter()
+        .position(|a| a == "--weights")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
+
+    let use_random = weights_path.is_none();
+    let mode = if use_random { "Random Weights" } else { "Loaded Weights" };
+
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║           LTX-2.3 Rust Inference Demo (Random Weights)      ║");
+    println!("║           LTX-2.3 Rust Inference Demo ({:<20}) ║", mode);
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
 
@@ -63,12 +73,22 @@ fn main() {
     println!("  Layers:       {num_layers}");
     println!("  Denoising:    {n_steps} steps");
     println!("  CFG scale:    {cfg_scale}");
+    if let Some(ref path) = weights_path {
+        println!("  Weights:      {path}");
+    }
     println!();
 
     // Build model
     tch::maybe_init_cuda();
-    let vs = tch::nn::VarStore::new(Device::Cpu);
+    let mut vs = tch::nn::VarStore::new(Device::Cpu);
     let model = build_model(&vs.root(), dim, num_layers);
+
+    // Load weights if provided
+    if let Some(ref path) = weights_path {
+        println!("Loading weights from: {path}");
+        vs.load(path).expect("failed to load weights");
+        println!("Weights loaded successfully!");
+    }
 
     // Count parameters
     let vars = vs.variables();
