@@ -13,7 +13,7 @@ fn make_vs() -> tch::nn::VarStore {
 
 fn build_model(vs: &tch::nn::Path, dim: i64) -> LTXModel {
     let mut blocks = Vec::new();
-    for i in 0..2 {
+    for i in 0..28 {
         blocks.push(BasicAVTransformerBlock::new(
             &(vs / "blocks" / i),
             dim,
@@ -23,7 +23,7 @@ fn build_model(vs: &tch::nn::Path, dim: i64) -> LTXModel {
             RopeType::Interleaved,
         ));
     }
-    let norm_out = RMSNorm::default_eps(dim, vs.device());
+    let norm_out = RMSNorm::default_eps_with_path(vs / "norm_out", dim);
     let proj_out = tch::nn::linear(vs / "proj_out", dim, dim, Default::default());
     LTXModel::new(blocks, norm_out, proj_out)
 }

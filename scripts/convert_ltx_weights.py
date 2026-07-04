@@ -41,11 +41,10 @@ def map_key(key: str) -> str:
     key = re.sub(r'adaln_single\.emb\.timestep_embedder\.linear_2', r'blocks.0.adaln.linear_2', key)
     key = re.sub(r'adaln_single\.linear', r'blocks.0.adaln.linear', key)
 
-    # Map scale_shift_table to adaln.linear (same function)
-    # In Python: scale_shift_table [6, dim] → adaln.linear output [6*dim]
-    # These are the same weights, just different shapes
-    key = re.sub(r'transformer_blocks\.(\d+)\.scale_shift_table', r'blocks.\1.adaln.linear', key)
-    key = re.sub(r'^scale_shift_table$', r'blocks.0.adaln.linear', key)
+    # Skip scale_shift_table - it's a separate tensor not used in our Rust impl
+    # The adaln.linear handles the output projection separately
+    if 'scale_shift_table' in key:
+        return key  # Will be skipped by should_skip
 
     # Map feed forward keys
     key = key.replace('.ff.net.0.proj.', '.ff.net_0.')
@@ -65,6 +64,7 @@ def should_skip(key: str) -> bool:
         'norm2.weight', 'norm2.bias',
         'caption_projection',
         'vae.',
+        'scale_shift_table',  # Separate tensor not used in Rust impl
     ]
     for pattern in skip_patterns:
         if pattern in key:
@@ -106,6 +106,16 @@ def convert_weights(input_path: str, output_path: str):
                 new_key = key.replace("blocks.0.adaln.", f"blocks.{block_idx}.adaln.")
                 state_dict[new_key] = state_dict[key].clone()
                 print(f"  {key} → {new_key}")
+
+    # Add missing norm weights (initialized to ones - these are extra layers in Rust impl)
+    print(f"\nAdding missing norm weights (initialized to ones)...")
+    for block_idx in range(28):
+        for norm_name in ['norm1', 'norm_cross', 'norm2']:
+            key = f'blocks.{block_idx}.{norm_name}.weight'
+            if key not in state_dict:
+                # Create weight tensor initialized to ones
+                state_dict[key] = torch.ones(2048, dtype=torch.float32)
+                print(f"  Added: {key}")
 
     print(f"\nSaving {len(state_dict)} tensors to: {output_path}")
     save_file(state_dict, output_path)

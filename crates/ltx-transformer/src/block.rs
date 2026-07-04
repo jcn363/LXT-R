@@ -24,7 +24,8 @@ impl BasicAVTransformerBlock {
         context_dim: Option<i64>,
         rope_type: RopeType,
     ) -> Self {
-        let adaln = AdaLayerNormSingle::new(&(vs / "adaln"), dim);
+        // Python model uses sinusoidal_dim=256 for timestep embedding input
+        let adaln = AdaLayerNormSingle::new_with_input_dim(&(vs / "adaln"), dim, 256);
         let self_attn = TransformerAttention::new(
             &(vs / "self_attn"),
             dim,

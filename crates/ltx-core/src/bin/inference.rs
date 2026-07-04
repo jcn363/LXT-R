@@ -20,7 +20,7 @@ use ltx_types::{Guider, Scheduler};
 use tch::nn::ModuleT;
 use tch::{Device, Kind, Tensor};
 
-fn build_model(vs: &tch::nn::Path, dim: i64, num_layers: i64) -> LTXModel {
+fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64) -> LTXModel {
     let mut blocks = Vec::new();
     for i in 0..num_layers {
         blocks.push(BasicAVTransformerBlock::new(
@@ -33,7 +33,8 @@ fn build_model(vs: &tch::nn::Path, dim: i64, num_layers: i64) -> LTXModel {
         ));
     }
     let norm_out = RMSNorm::default_eps_with_path(vs / "norm_out", dim);
-    let proj_out = tch::nn::linear(vs / "proj_out", dim, dim, Default::default());
+    // Python model proj_out: maps from dim (2048) to patch_dim (128)
+    let proj_out = tch::nn::linear(vs / "proj_out", dim, patch_dim, Default::default());
     LTXModel::new(blocks, norm_out, proj_out)
 }
 
@@ -85,20 +86,11 @@ fn main() {
     // Build model
     tch::maybe_init_cuda();
     let vs = tch::nn::VarStore::new(Device::Cpu);
-    let model = build_model(&vs.root(), dim, num_layers);
+    let model = build_model(&vs.root(), dim, patch_dim, num_layers);
 
     // Create patchify_proj for real weights (maps patch_dim → dim)
     let patchify_proj = if !use_random {
         Some(tch::nn::linear(vs.root() / "patchify_proj", patch_dim, dim, Default::default()))
-    } else {
-        None
-    };
-
-    // Create output projection (maps dim → patch_dim) for real weights
-    let output_proj = if !use_random {
-        // proj_out maps dim → dim in the model, but we need dim → patch_dim
-        // Use the model's proj_out and then project down
-        Some(tch::nn::linear(vs.root() / "output_proj", dim, patch_dim, Default::default()))
     } else {
         None
     };
@@ -194,15 +186,8 @@ fn main() {
         // Apply guidance
         let guided = guider.guide(&cond_pred, &uncond_pred);
 
-        // Project back to patch_dim if needed
-        let output = if let Some(ref proj) = output_proj {
-            proj.forward_t(&guided, false)
-        } else {
-            guided
-        };
-
         // Unpatchify: (B, T, patch_dim) → (B, C, F, H, W)
-        let denoised = unpatchify_5d(&output, b, c, f, h, w, p1, p2, p3);
+        let denoised = unpatchify_5d(&guided, b, c, f, h, w, p1, p2, p3);
 
         // Euler step
         x = step.step(&x, sigma, next_sigma, &denoised, Kind::Float);
