@@ -51,8 +51,14 @@ hf_hub_download('Lightricks/LTX-Video', 'ltxv-2b-0.9.8-distilled.safetensors', l
 # Convert to Rust format
 python3 scripts/convert_ltx_weights.py --input weights/ltxv-2b-0.9.8-distilled.safetensors --output weights_rust.safetensors
 
-# Run with real weights
-cargo run --bin ltx-inference -- --weights weights_rust.safetensors --steps 10
+# Run with real weights (16x16, 20 steps)
+cargo run --release --bin ltx-inference -- --weights weights_rust.safetensors --steps 20
+
+# Run with custom resolution
+cargo run --release --bin ltx-inference -- --weights weights_rust.safetensors --steps 8 --height 32 --width 32
+
+# Run with prompt
+cargo run --release --bin ltx-inference -- --weights weights_rust.safetensors --prompt "a sunset over mountains"
 ```
 
 ### Run Tests
@@ -157,19 +163,22 @@ crates/
 - 384 tests passing
 - Inference pipeline loads 929/929 tensors from LTX-Video 2B model
 - 28-layer transformer runs with real weights
-- Video frames generated (16x16 RGB)
+- Video frames generated (16x16 to 32x32 RGB)
+- SentencePiece tokenizer integrated (replaces incompatible T5 format)
+- Configurable resolution and denoising steps via CLI
 
-### In Progress 🔧
-- **VAE decoder integration** — Channel mismatch identified. VAE decoder weights available but not yet wired into inference (memory constraints on CI runners).
-- **Text encoder integration** — 219 Gemma3 weights downloaded. Tokenizer format (T5-based) incompatible with `tokenizers` crate. Text encoder needs tokenizer fix before wiring.
+### Known Limitations
+- **VAE decoder** — Decoder weights available (132 tensors) but not wired into inference due to memory constraints. The 2B transformer (10GB) + decoder exceeds 32GB RAM when combined with CFG (2x forward passes). Requires GPU or 64GB+ RAM.
+- **Text encoder** — Gemma3 tokenizer infrastructure complete (SentencePiece integration). Full encoder (48 layers, 3840 dim) not yet wired into inference due to memory constraints.
+- **Resolution** — 32x32 works with 8 steps on 32GB RAM. Higher resolutions require GPU or model sharding.
+- **Denoising steps** — 20 steps at 16x16, 8 steps at 32x32 on 32GB RAM. More steps possible on GPU.
 
 ### Not Yet Implemented 📋
-1. **Text encoder integration** — Gemma3 + SigLIP for prompt conditioning (crate exists but not wired into inference)
-2. **VAE decoder** — Convert latent tensor to pixel-space video (weights available, architecture needs integration)
-3. **Higher resolution** — Native LTX-Video runs at 768x512, current demo uses 16x16
-4. **More denoising steps** — Quality improves with 50+ steps (current demo uses 2-20)
-5. **Prompt conditioning** — CFG guidance needs text encoder output for conditional generation
-6. **Audio pipeline** — Audio VAE + transformer for audio generation
+1. **VAE decoder integration** — Wire decoder for proper pixel-space output (requires memory optimization)
+2. **Text encoder integration** — Wire Gemma3 encoder for prompt conditioning (requires memory optimization)
+3. **GPU support** — CUDA acceleration for higher resolution and more steps
+4. **Model sharding** — Split model across CPU/GPU for larger resolutions
+5. **Audio pipeline** — Audio VAE + transformer for audio generation
 
 ## License
 

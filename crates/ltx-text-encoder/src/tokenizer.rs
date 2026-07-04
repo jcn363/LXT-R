@@ -1,7 +1,7 @@
-use tokenizers::Tokenizer;
+use sentencepiece::SentencePieceProcessor;
 
 pub struct LTXVGemmaTokenizer {
-    tokenizer: Tokenizer,
+    model: SentencePieceProcessor,
     max_length: usize,
 }
 
@@ -10,17 +10,14 @@ pub type TokenizerError = Box<dyn std::error::Error + Send + Sync>;
 impl LTXVGemmaTokenizer {
     #[must_use = "caller must handle tokenizer error"]
     pub fn from_file(path: &str, max_length: usize) -> Result<Self, TokenizerError> {
-        let tokenizer = Tokenizer::from_file(path)?;
-        Ok(Self {
-            tokenizer,
-            max_length,
-        })
+        let model = SentencePieceProcessor::open(path)?;
+        Ok(Self { model, max_length })
     }
 
     #[must_use = "caller must handle tokenization error"]
     pub fn encode(&self, text: &str) -> Result<Vec<i64>, TokenizerError> {
-        let encoding = self.tokenizer.encode(text, true)?;
-        let mut ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
+        let encoding = self.model.encode(text)?;
+        let mut ids: Vec<i64> = encoding.iter().map(|piece| piece.id as i64).collect();
         ids.truncate(self.max_length);
         Ok(ids)
     }
@@ -31,7 +28,7 @@ impl LTXVGemmaTokenizer {
     }
 
     pub fn pad_token_id(&self) -> i64 {
-        self.tokenizer.get_padding().map_or(0, |p| p.pad_id as i64)
+        0
     }
 
     pub fn eos_token_id(&self) -> i64 {

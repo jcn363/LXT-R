@@ -50,6 +50,9 @@ def map_key(key: str) -> str:
     if key.startswith('vae.decoder.'):
         key = 'decoder.' + key[len('vae.decoder.'):]
 
+    # Map text encoder keys: text_encoder.blocks.N.* → text_encoder.blocks.N.*
+    # (already in correct format from merge)
+
     # Map feed forward keys
     key = key.replace('.ff.net.0.proj.', '.ff.net_0.')
     key = key.replace('.ff.net.2.', '.ff.net_2.')

@@ -3,6 +3,7 @@ use ltx_attention::{precompute_freqs_cis, RopeType};
 use ltx_norm::RMSNorm;
 use ltx_patchify::{patchify_5d, unpatchify_5d};
 use ltx_timestep::get_timestep_embedding;
+use ltx_types::{NORM_EPS, ROPE_THETA};
 use tch::{Device, Kind, Tensor};
 
 fn time_fn<F: FnMut()>(name: &str, f: &mut F, iterations: u32, warmup: u32) {
@@ -31,7 +32,7 @@ fn main() {
 
     // RMSNorm
     let dim = 64;
-    let norm = RMSNorm::new(dim, 1e-6, Device::Cpu);
+    let norm = RMSNorm::new(dim, NORM_EPS, Device::Cpu);
     let x = Tensor::randn([2, 128, dim], (Kind::Float, Device::Cpu));
     time_fn("RMSNorm (2,128,64)", &mut || { let _ = norm.forward(&x); }, iterations, warmup);
 
@@ -40,10 +41,10 @@ fn main() {
     time_fn("Sinusoidal embed", &mut || { let _ = get_timestep_embedding(&t, 64, 10_000); }, iterations, warmup);
 
     // RoPE
-    let (cos, sin) = precompute_freqs_cis(64, 128, 10000.0, RopeType::Split, Device::Cpu);
+    let (cos, sin) = precompute_freqs_cis(64, 128, ROPE_THETA, RopeType::Split, Device::Cpu);
     let q = Tensor::randn([1, 128, 64], (Kind::Float, Device::Cpu));
     time_fn("RoPE precompute", &mut || {
-        let _ = precompute_freqs_cis(64, 128, 10000.0, RopeType::Split, Device::Cpu);
+        let _ = precompute_freqs_cis(64, 128, ROPE_THETA, RopeType::Split, Device::Cpu);
     }, iterations, warmup);
 
     // Patchify 5D roundtrip

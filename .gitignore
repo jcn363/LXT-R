@@ -7,3 +7,8 @@ Cargo.lock
 graphify-out/
 CLAUDE.local.md
 .serena/
+output_frames/
+output_frame.pgm
+output_video.mp4
+weights/
+weights_rust*.safetensors
