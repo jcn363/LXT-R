@@ -94,5 +94,38 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
 
         // Speed indicator
         ui.label(format!("{:.1}×", state.fps / 8.0));
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button("⬇ Video").clicked() {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("MP4", &["mp4"])
+                    .save_file()
+                {
+                    let dir = path.parent().unwrap_or(std::path::Path::new("."));
+                    match crate::export::save_video_mp4(
+                        &state.frames_display,
+                        state.height,
+                        state.width,
+                        dir,
+                        &path,
+                    ) {
+                        Ok(_) => {}
+                        Err(e) => state.inference = crate::state::InferenceState::Error(e),
+                    }
+                }
+            }
+            if ui.button("⬇ PNGs").clicked() {
+                if let Some(dir) = rfd::FileDialog::new().set_title("Save frames").pick_folder() {
+                    if let Err(e) = crate::export::save_frames_png(
+                        &state.frames_display,
+                        state.height,
+                        state.width,
+                        &dir,
+                    ) {
+                        state.inference = crate::state::InferenceState::Error(e);
+                    }
+                }
+            }
+        });
     });
 }
