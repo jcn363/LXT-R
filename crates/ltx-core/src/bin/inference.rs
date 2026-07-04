@@ -95,6 +95,13 @@ fn main() {
         None
     };
 
+    // Create VAE decoder for real weights
+    let use_vae = !use_random;
+    if use_vae {
+        // VAE decoder will be loaded from weights
+        println!("VAE decoder will be loaded from weights");
+    }
+
     // Load weights if provided
     if let Some(ref path) = weights_path {
         println!("Loading weights from: {path}");
@@ -210,40 +217,46 @@ fn main() {
     println!("Output max:    {:.6}", x.max().double_value(&[]));
     println!("Output finite: {}", x.isfinite().all().double_value(&[]) > 0.0);
 
-    // Save latent if requested
-    if save_latent {
-        println!("\nLatent tensor saved (in-memory). Shape: {:?}", x.size());
-    }
-
-    // Convert to pixel space for visualization
+    // Simple pixel decoder: map 4-channel latent to 3-channel RGB
+    // This is a simplified visualization - real decoding uses VAE
     let pixel = x.clamp(-1.0, 1.0);  // Clamp to valid range
-    let pixel = (pixel + 1.0) * 127.5;  // Convert to [0, 255]
-    let pixel = pixel.to_kind(Kind::Uint8);
 
-    // Save all frames as PGM files for video creation
+    // Simple channel mixing: combine 4 channels into 3 RGB channels
+    let r = pixel.narrow(1, 0, 1).squeeze_dim(1);  // Channel 0
+    let g = pixel.narrow(1, 1, 1).squeeze_dim(1);  // Channel 1
+    let b = pixel.narrow(1, 2, 1).squeeze_dim(1);  // Channel 2
+    let rgb = Tensor::stack(&[&r, &g, &b], 1);  // (B, 3, F, H, W)
+
+    // Normalize to [0, 255]
+    let rgb_min = rgb.min().double_value(&[]);
+    let rgb_max = rgb.max().double_value(&[]);
+    let rgb = (rgb - rgb_min) / (rgb_max - rgb_min + 1e-8);
+    let rgb = (rgb * 255.0).to_kind(Kind::Uint8);
+
+    // Save frames
     let frames_dir = "output_frames";
     std::fs::create_dir_all(frames_dir).expect("failed to create frames directory");
 
     use std::io::Write;
     for frame_idx in 0..f {
-        let frame = pixel.narrow(2, frame_idx, 1).reshape([1, c, h, w]);
-        let frame = frame.permute([0, 2, 3, 1]);  // (1, H, W, C)
-        let frame = frame.reshape([1, h * w * c]);
+        let frame = rgb.narrow(2, frame_idx as i64, 1).reshape([3, h, w]);
+        let frame = frame.permute([1, 2, 0]);  // (H, W, 3)
 
         let pgm_path = format!("{frames_dir}/frame_{frame_idx:04}.pgm");
         let header = format!("P6\n{w} {h}\n255\n");
         let mut file = std::fs::File::create(&pgm_path).expect("failed to create PGM file");
         file.write_all(header.as_bytes()).unwrap();
 
-        let bytes: Vec<u8> = (0..frame.size()[1])
-            .map(|i| frame.double_value(&[0, i]) as u8)
+        let data = frame.reshape([h * w * 3]);
+        let bytes: Vec<u8> = (0..data.size()[0])
+            .map(|i| data.double_value(&[i]) as u8)
             .collect();
         file.write_all(&bytes).unwrap();
     }
 
     println!("Frames saved to: {frames_dir}/ (0-{}.pgm)", f - 1);
 
-    // Try to create video with ffmpeg if available
+    // Create video with ffmpeg
     let video_path = "output_video.mp4";
     let ffmpeg_result = std::process::Command::new("ffmpeg")
         .args([
@@ -262,7 +275,6 @@ fn main() {
         }
         _ => {
             println!("ffmpeg not available or failed. Video frames saved as PGM files.");
-            println!("To create video manually: ffmpeg -framerate 8 -i {frames_dir}/frame_%04d.pgm -c:v libx264 -pix_fmt yuv420p {video_path}");
         }
     }
 

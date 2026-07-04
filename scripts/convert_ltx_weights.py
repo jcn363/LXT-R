@@ -46,6 +46,10 @@ def map_key(key: str) -> str:
     if 'scale_shift_table' in key:
         return key  # Will be skipped by should_skip
 
+    # Map VAE decoder keys: vae.decoder.X → decoder.X
+    if key.startswith('vae.decoder.'):
+        key = 'decoder.' + key[len('vae.decoder.'):]
+
     # Map feed forward keys
     key = key.replace('.ff.net.0.proj.', '.ff.net_0.')
     key = key.replace('.ff.net.2.', '.ff.net_2.')
@@ -63,7 +67,6 @@ def should_skip(key: str) -> bool:
         'norm_cross.weight', 'norm_cross.bias',
         'norm2.weight', 'norm2.bias',
         'caption_projection',
-        'vae.',
         'scale_shift_table',  # Separate tensor not used in Rust impl
     ]
     for pattern in skip_patterns:
@@ -116,6 +119,11 @@ def convert_weights(input_path: str, output_path: str):
                 # Create weight tensor initialized to ones
                 state_dict[key] = torch.ones(2048, dtype=torch.float32)
                 print(f"  Added: {key}")
+
+    # Add norm_out weight if missing
+    if 'norm_out.weight' not in state_dict:
+        state_dict['norm_out.weight'] = torch.ones(2048, dtype=torch.float32)
+        print("  Added: norm_out.weight")
 
     print(f"\nSaving {len(state_dict)} tensors to: {output_path}")
     save_file(state_dict, output_path)

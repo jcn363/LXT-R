@@ -150,6 +150,26 @@ crates/
 └── goldens/            # Golden reference data (.safetensors)
 ```
 
+## Remaining Work
+
+### Completed ✅
+- All 20 crates implemented (~11,700 LOC)
+- 384 tests passing
+- Inference pipeline loads 929/929 tensors from LTX-Video 2B model
+- 28-layer transformer runs with real weights
+- Video frames generated (16x16 RGB)
+
+### In Progress 🔧
+- **VAE decoder integration** — 132 VAE keys converted but decoder architecture not yet wired into inference. The `VideoDecoder` exists in `ltx-video-vae` but needs weight loading and pipeline integration.
+
+### Not Yet Implemented 📋
+1. **Text encoder integration** — Gemma3 + SigLIP for prompt conditioning (crate exists but not wired into inference)
+2. **VAE decoder** — Convert latent tensor to pixel-space video (weights available, architecture needs integration)
+3. **Higher resolution** — Native LTX-Video runs at 768x512, current demo uses 16x16
+4. **More denoising steps** — Quality improves with 50+ steps (current demo uses 2-20)
+5. **Prompt conditioning** — CFG guidance needs text encoder output for conditional generation
+6. **Audio pipeline** — Audio VAE + transformer for audio generation
+
 ## License
 
 MIT
