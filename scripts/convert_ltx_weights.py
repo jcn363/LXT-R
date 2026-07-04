@@ -36,8 +36,9 @@ def map_key(key: str) -> str:
     key = re.sub(r'transformer_blocks\.(\d+)\.ff\.', r'blocks.\1.ff.', key)
 
     # Map adaln_single to block 0 adaln (will be duplicated to all blocks)
-    key = re.sub(r'adaln_single\.emb\.timestep_embedder\.linear_1', r'blocks.0.adaln.emb.embedder.linear_1', key)
-    key = re.sub(r'adaln_single\.emb\.timestep_embedder\.linear_2', r'blocks.0.adaln.emb.embedder.linear_2', key)
+    # Python: adaln_single.emb.timestep_embedder.linear_1 → Rust: blocks.0.adaln.linear_1
+    key = re.sub(r'adaln_single\.emb\.timestep_embedder\.linear_1', r'blocks.0.adaln.linear_1', key)
+    key = re.sub(r'adaln_single\.emb\.timestep_embedder\.linear_2', r'blocks.0.adaln.linear_2', key)
     key = re.sub(r'adaln_single\.linear', r'blocks.0.adaln.linear', key)
 
     # Map scale_shift_table to adaln.linear (same function)

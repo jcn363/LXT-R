@@ -41,9 +41,9 @@ impl BasicAVTransformerBlock {
             context_dim,
             rope_type,
         );
-        let norm1 = RMSNorm::default_eps(dim, vs.device());
-        let norm_cross = RMSNorm::default_eps(dim, vs.device());
-        let norm2 = RMSNorm::default_eps(dim, vs.device());
+        let norm1 = RMSNorm::default_eps_with_path(vs / "norm1", dim);
+        let norm_cross = RMSNorm::default_eps_with_path(vs / "norm_cross", dim);
+        let norm2 = RMSNorm::default_eps_with_path(vs / "norm2", dim);
         let ff = FeedForward::new(&(vs / "ff"), dim);
 
         Self {

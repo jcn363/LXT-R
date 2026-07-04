@@ -32,7 +32,7 @@ fn build_model(vs: &tch::nn::Path, dim: i64, num_layers: i64) -> LTXModel {
             RopeType::Interleaved,
         ));
     }
-    let norm_out = RMSNorm::default_eps(dim, vs.device());
+    let norm_out = RMSNorm::default_eps_with_path(vs / "norm_out", dim);
     let proj_out = tch::nn::linear(vs / "proj_out", dim, dim, Default::default());
     LTXModel::new(blocks, norm_out, proj_out)
 }
@@ -235,27 +235,51 @@ fn main() {
     let pixel = (pixel + 1.0) * 127.5;  // Convert to [0, 255]
     let pixel = pixel.to_kind(Kind::Uint8);
 
-    // Save first frame as a simple PGM image for verification
-    // x is (B=1, C=4, F=4, H=16, W=16) → take first frame → reshape to (H, W, C)
-    let frame = pixel.narrow(2, 0, 1);  // (1, 4, 1, 16, 16)
-    let frame = frame.reshape([1, c, h, w]);  // (1, 4, 16, 16)
-    let frame = frame.narrow(0, 0, 1);  // (1, 4, 16, 16) — keep batch dim
-    let frame = frame.permute([0, 2, 3, 1]);  // (1, 16, 16, 4)
+    // Save all frames as PGM files for video creation
+    let frames_dir = "output_frames";
+    std::fs::create_dir_all(frames_dir).expect("failed to create frames directory");
 
-    // Write PGM header + data
-    let pgm_path = "output_frame.pgm";
-    let header = format!("P6\n{w} {h}\n255\n");
-    let mut file = std::fs::File::create(pgm_path).expect("failed to create PGM file");
     use std::io::Write;
-    file.write_all(header.as_bytes()).unwrap();
+    for frame_idx in 0..f {
+        let frame = pixel.narrow(2, frame_idx, 1).reshape([1, c, h, w]);
+        let frame = frame.permute([0, 2, 3, 1]);  // (1, H, W, C)
+        let frame = frame.reshape([1, h * w * c]);
 
-    // Convert tensor to bytes
-    let data = frame.reshape([1, h * w * c]);
-    let bytes: Vec<u8> = (0..data.size()[1])
-        .map(|i| data.double_value(&[0, i]) as u8)
-        .collect();
-    file.write_all(&bytes).unwrap();
-    println!("First frame saved to: {pgm_path} ({w}x{h} RGB)");
+        let pgm_path = format!("{frames_dir}/frame_{frame_idx:04}.pgm");
+        let header = format!("P6\n{w} {h}\n255\n");
+        let mut file = std::fs::File::create(&pgm_path).expect("failed to create PGM file");
+        file.write_all(header.as_bytes()).unwrap();
+
+        let bytes: Vec<u8> = (0..frame.size()[1])
+            .map(|i| frame.double_value(&[0, i]) as u8)
+            .collect();
+        file.write_all(&bytes).unwrap();
+    }
+
+    println!("Frames saved to: {frames_dir}/ (0-{}.pgm)", f - 1);
+
+    // Try to create video with ffmpeg if available
+    let video_path = "output_video.mp4";
+    let ffmpeg_result = std::process::Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-framerate", "8",
+            "-i", &format!("{frames_dir}/frame_%04d.pgm"),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            video_path,
+        ])
+        .output();
+
+    match ffmpeg_result {
+        Ok(output) if output.status.success() => {
+            println!("Video created: {video_path}");
+        }
+        _ => {
+            println!("ffmpeg not available or failed. Video frames saved as PGM files.");
+            println!("To create video manually: ffmpeg -framerate 8 -i {frames_dir}/frame_%04d.pgm -c:v libx264 -pix_fmt yuv420p {video_path}");
+        }
+    }
 
     println!("\nInference complete. Output is a {:?} tensor.", x.size());
 }
