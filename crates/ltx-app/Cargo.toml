@@ -1,0 +1,26 @@
+[package]
+name = "ltx-app"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ltx-gui"
+path = "src/main.rs"
+
+[dependencies]
+ltx-core = { path = "../ltx-core" }
+ltx-types = { path = "../ltx-types" }
+ltx-norm = { path = "../ltx-norm" }
+ltx-attention = { path = "../ltx-attention" }
+ltx-components = { path = "../ltx-components" }
+ltx-patchify = { path = "../ltx-patchify" }
+ltx-transformer = { path = "../ltx-transformer" }
+ltx-video-vae = { path = "../ltx-video-vae" }
+tch = { workspace = true }
+safetensors = { workspace = true }
+eframe = "0.31"
+rfd = "0.15"
+image = "0.25"
+
+[lints]
+workspace = true

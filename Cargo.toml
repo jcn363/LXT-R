@@ -20,6 +20,7 @@ members = [
     "crates/ltx-loader",
     "crates/ltx-quantization",
     "crates/ltx-core",
+    "crates/ltx-app",
     "crates/ltx-test-utils",
 ]
 
