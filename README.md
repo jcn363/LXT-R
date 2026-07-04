@@ -160,7 +160,7 @@ crates/
 - Video frames generated (16x16 RGB)
 
 ### In Progress 🔧
-- **VAE decoder integration** — 132 VAE keys converted but decoder architecture not yet wired into inference. The `VideoDecoder` exists in `ltx-video-vae` but needs weight loading and pipeline integration.
+- **VAE decoder integration** — Channel mismatch identified: transformer operates on 4-ch latents, VAE decoder expects 128-ch latents. Two options: (a) add VAE encoder before transformer, or (b) work in 4-ch space only.
 
 ### Not Yet Implemented 📋
 1. **Text encoder integration** — Gemma3 + SigLIP for prompt conditioning (crate exists but not wired into inference)
