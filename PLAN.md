@@ -1267,7 +1267,7 @@ All depend on: ───────┘
 
 Each shared primitive gets tested once, then reused. Tests live in each crate's `tests/` directory — see `crates/*/tests/` for current coverage.
 
-- **Current**: Structural correctness (compilation, type checking) via `cargo test --workspace` (384 tests)
+- **Current**: Structural correctness (compilation, type checking) via `cargo test --workspace` (480 tests)
 - **Implemented**: Golden `.safetensors` comparison tests verified against reference output via `ltx_test_utils::load_golden`
 
 ---
@@ -1288,9 +1288,9 @@ Each shared primitive gets tested once, then reused. Tests live in each crate's 
 | **P9** | `ltx-core` + integration | 2 | ~500 | ✅ Complete |
 | **P10** | Benchmarking + optimization | — | — | ⏳ Pending |
 | **Total (plan estimate)** | | **~77** | **~16,500** | |
-| **Total (actual)** | | **159** | **~11,700** | **P0–P9 ✅** |
+| **Total (actual)** | | **171** | **~13,600** | **P0–P9 ✅** |
 
-**Actual breakdown**: 110 source files (~8,400 LOC) + 49 test files (~3,300 LOC) = 159 files, ~11,700 total LOC across 20 crates (including `ltx-test-utils`).
+**Actual breakdown**: 119 source files (~9,800 LOC) + 52 test files (~3,800 LOC) = 171 files, ~13,600 total LOC across 22 crates (including `ltx-test-utils` and `ltx-app`).
 
 **DRY approach (plan estimate)** reduced total LOC by ~28% vs non-DRY (16,500 → 11,700) and eliminated 10+ duplicated implementations across transformer, VAE, text encoder, and upsampler crates. The original plan estimated ~16,500 LOC and 23 weeks; the actual implementation was ~11,700 LOC (including comprehensive test coverage) and substantially faster due to the shared-primitive architecture.
 

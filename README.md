@@ -4,7 +4,7 @@ Rust rewrite of [LTX-2.3](https://github.com/LightricksResearch/LTX-Video) core 
 
 ## Architecture
 
-20 crates, ~11,700 LOC (110 source files + 49 test files). All model logic is pure Rust; external FFI (`tch`, CUDA) is isolated behind safe APIs.
+22 crates, ~13,600 LOC (119 source files + 52 test files). All model logic is pure Rust; external FFI (`tch`, CUDA) is isolated behind safe APIs.
 
 ```
 ltx-core (facade)
@@ -24,6 +24,8 @@ ltx-core (facade)
 │   ├── ltx-loader, ltx-quantization
 │   ├── ltx-components, ltx-conditioning, ltx-guidance
 │   └── ltx-core (public API)
+├── Applications:
+│   └── ltx-app (eframe GUI + CLI inference)
 └── Testing:
     └── ltx-test-utils (golden file loading, assertions, fixtures)
 ```
@@ -55,7 +57,7 @@ cargo run --release --bin ltx-inference -- --weights weights_rust_no_te.safetens
 ### Run Tests
 
 ```bash
-cargo test --workspace  # 384 tests
+cargo test --workspace  # 480 tests
 ```
 
 ## Weight Conversion
@@ -130,6 +132,7 @@ crates/
 ├── ltx-loader/         # Checkpoint loading
 ├── ltx-quantization/   # FP8 quantization policy
 ├── ltx-test-utils/     # Golden file loading, assertions
+├── ltx-app/            # eframe GUI application
 ├── ltx-core/           # Public API facade + inference binary
 └── goldens/            # Golden reference data (.safetensors)
 ```
@@ -137,13 +140,14 @@ crates/
 ## Remaining Work
 
 ### Completed
-- All 20 crates implemented (~11,700 LOC)
-- 384 tests passing
+- All 22 crates implemented (~13,600 LOC)
+- 480 tests passing
 - Inference pipeline loads 929/929 tensors from LTX-Video 2B model
 - 28-layer transformer runs with real weights
 - Video frames generated (16x16 to 32x32 RGB)
 - SentencePiece tokenizer integrated
 - Configurable resolution and denoising steps via CLI
+- eframe GUI with video playback toolbar and export (PNG/MP4)
 
 ### Known Limitations
 - **VAE decoder** — Decoder architecture mismatch with Python model (7 up_blocks vs 4 in Rust). Needs architecture alignment.
