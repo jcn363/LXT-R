@@ -23,8 +23,22 @@ pub struct Tile {
 }
 
 impl Tile {
-    pub fn new(t_start: i64, t_end: i64, h_start: i64, h_end: i64, w_start: i64, w_end: i64) -> Self {
-        Self { t_start, t_end, h_start, h_end, w_start, w_end }
+    pub fn new(
+        t_start: i64,
+        t_end: i64,
+        h_start: i64,
+        h_end: i64,
+        w_start: i64,
+        w_end: i64,
+    ) -> Self {
+        Self {
+            t_start,
+            t_end,
+            h_start,
+            h_end,
+            w_start,
+            w_end,
+        }
     }
 
     /// Temporal extent of this tile (in latent frames).
@@ -74,11 +88,23 @@ pub fn compute_tile_grid(
             while w < latent_w {
                 let w_end = (w + tile_size_w).min(latent_w);
                 tiles.push(Tile::new(t, t_end, h, h_end, w, w_end));
-                w = if w_end == latent_w { latent_w } else { w_end - tile_overlap_w };
+                w = if w_end == latent_w {
+                    latent_w
+                } else {
+                    w_end - tile_overlap_w
+                };
             }
-            h = if h_end == latent_h { latent_h } else { h_end - tile_overlap_h };
+            h = if h_end == latent_h {
+                latent_h
+            } else {
+                h_end - tile_overlap_h
+            };
         }
-        t = if t_end == latent_t { latent_t } else { t_end - tile_overlap_t };
+        t = if t_end == latent_t {
+            latent_t
+        } else {
+            t_end - tile_overlap_t
+        };
     }
     tiles
 }
@@ -93,17 +119,12 @@ pub fn compute_tile_grid(
 /// * `overlap_len` - Overlap region length in latent frames
 /// * `is_first` - Whether this tile is the first in the temporal sequence
 /// * `is_last` - Whether this tile is the last in the temporal sequence
-pub fn trapezoidal_mask(
-    tile_len: i64,
-    overlap_len: i64,
-    is_first: bool,
-    is_last: bool,
-) -> Tensor {
+pub fn trapezoidal_mask(tile_len: i64, overlap_len: i64, is_first: bool, is_last: bool) -> Tensor {
     let weights = Tensor::ones([tile_len], (tch::Kind::Float, tch::Device::Cpu));
 
     if !is_first && overlap_len > 0 {
-        let ramp = Tensor::arange(overlap_len, (tch::Kind::Float, tch::Device::Cpu))
-            / overlap_len as f64;
+        let ramp =
+            Tensor::arange(overlap_len, (tch::Kind::Float, tch::Device::Cpu)) / overlap_len as f64;
         let left = weights.narrow(0, 0, overlap_len) * &ramp;
         weights.narrow(0, 0, overlap_len).copy_(&left);
     }

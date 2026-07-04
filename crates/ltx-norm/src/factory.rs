@@ -1,8 +1,8 @@
-use tch::nn::ModuleT;
 use ltx_types::NormLayerType;
+use tch::nn::ModuleT;
 
-use crate::pixel_norm::PixelNorm;
 use crate::group_norm::GroupNorm;
+use crate::pixel_norm::PixelNorm;
 
 pub fn build_norm_layer(
     norm_type: NormLayerType,

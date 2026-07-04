@@ -26,8 +26,22 @@ pub fn make_resblock(
     vs: tch::nn::Path,
 ) -> Box<dyn ModuleT> {
     match dims {
-        3 => Box::new(ResnetBlock3D::new(vs, in_channels, out_channels, norm_type, norm_groups, causal)),
-        2 => Box::new(ResnetBlock2D::new(vs, in_channels, out_channels, norm_type, norm_groups, causal)),
+        3 => Box::new(ResnetBlock3D::new(
+            vs,
+            in_channels,
+            out_channels,
+            norm_type,
+            norm_groups,
+            causal,
+        )),
+        2 => Box::new(ResnetBlock2D::new(
+            vs,
+            in_channels,
+            out_channels,
+            norm_type,
+            norm_groups,
+            causal,
+        )),
         _ => panic!("make_resblock: unsupported dims={dims} (only 2 or 3 supported)"),
     }
 }

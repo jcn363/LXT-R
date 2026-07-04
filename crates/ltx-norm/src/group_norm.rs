@@ -1,5 +1,5 @@
-use tch::Tensor;
 use ltx_types::NORM_EPS;
+use tch::Tensor;
 
 /// Thin wrapper around `Tensor::group_norm` that implements `ModuleT`.
 ///

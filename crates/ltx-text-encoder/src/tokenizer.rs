@@ -11,7 +11,10 @@ impl LTXVGemmaTokenizer {
     #[must_use = "caller must handle tokenizer error"]
     pub fn from_file(path: &str, max_length: usize) -> Result<Self, TokenizerError> {
         let tokenizer = Tokenizer::from_file(path)?;
-        Ok(Self { tokenizer, max_length })
+        Ok(Self {
+            tokenizer,
+            max_length,
+        })
     }
 
     #[must_use = "caller must handle tokenization error"]
@@ -28,9 +31,7 @@ impl LTXVGemmaTokenizer {
     }
 
     pub fn pad_token_id(&self) -> i64 {
-        self.tokenizer
-            .get_padding()
-            .map_or(0, |p| p.pad_id as i64)
+        self.tokenizer.get_padding().map_or(0, |p| p.pad_id as i64)
     }
 
     pub fn eos_token_id(&self) -> i64 {

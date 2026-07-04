@@ -3,7 +3,7 @@ use tch::nn::{ModuleT, Path};
 use tch::Tensor;
 
 use ltx_conv::CausalConv2d;
-use ltx_types::{LRELU_SLOPE, NormLayerType};
+use ltx_types::{NormLayerType, LRELU_SLOPE};
 
 /// Apply leaky ReLU with a custom negative slope (tch 0.16 `leaky_relu()` takes no args).
 fn leaky_relu(x: &Tensor, negative_slope: f64) -> Tensor {
@@ -39,8 +39,22 @@ impl ResnetBlock2D {
     ) -> Self {
         let vs = vs.borrow();
 
-        let conv1 = CausalConv2d::new(vs / "conv1", in_channels, out_channels, 3, 1, ltx_conv::CausalityAxis::Time);
-        let conv2 = CausalConv2d::new(vs / "conv2", out_channels, out_channels, 3, 1, ltx_conv::CausalityAxis::Time);
+        let conv1 = CausalConv2d::new(
+            vs / "conv1",
+            in_channels,
+            out_channels,
+            3,
+            1,
+            ltx_conv::CausalityAxis::Time,
+        );
+        let conv2 = CausalConv2d::new(
+            vs / "conv2",
+            out_channels,
+            out_channels,
+            3,
+            1,
+            ltx_conv::CausalityAxis::Time,
+        );
 
         let shortcut: Option<Box<dyn ModuleT>> = if in_channels != out_channels {
             Some(Box::new(tch::nn::conv2d(

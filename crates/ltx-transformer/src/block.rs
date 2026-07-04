@@ -1,7 +1,7 @@
-use tch::Tensor;
 use ltx_attention::{RopeType, TransformerAttention};
 use ltx_norm::RMSNorm;
 use ltx_timestep::AdaLayerNormSingle;
+use tch::Tensor;
 
 use crate::feed_forward::FeedForward;
 
@@ -26,13 +26,22 @@ impl BasicAVTransformerBlock {
     ) -> Self {
         let adaln = AdaLayerNormSingle::new(&(vs / "adaln"), dim);
         let self_attn = TransformerAttention::new(dim, num_heads, head_dim, None, rope_type);
-        let cross_attn = TransformerAttention::new(dim, num_heads, head_dim, context_dim, rope_type);
+        let cross_attn =
+            TransformerAttention::new(dim, num_heads, head_dim, context_dim, rope_type);
         let norm1 = RMSNorm::default_eps(dim, vs.device());
         let norm_cross = RMSNorm::default_eps(dim, vs.device());
         let norm2 = RMSNorm::default_eps(dim, vs.device());
         let ff = FeedForward::new(&(vs / "ff"), dim);
 
-        Self { adaln, self_attn, cross_attn, norm1, norm_cross, norm2, ff }
+        Self {
+            adaln,
+            self_attn,
+            cross_attn,
+            norm1,
+            norm_cross,
+            norm2,
+            ff,
+        }
     }
 
     pub fn forward(
@@ -47,10 +56,14 @@ impl BasicAVTransformerBlock {
         let chunks: Vec<Tensor> = modulation.chunk(6, -1);
         // Unsqueeze to (B, 1, dim) for broadcasting with (B, seq, dim)
         let (shift_msa, scale_msa, gate_msa) = (
-            chunks[0].unsqueeze(1), chunks[1].unsqueeze(1), chunks[2].unsqueeze(1),
+            chunks[0].unsqueeze(1),
+            chunks[1].unsqueeze(1),
+            chunks[2].unsqueeze(1),
         );
         let (shift_mlp, scale_mlp, gate_mlp) = (
-            chunks[3].unsqueeze(1), chunks[4].unsqueeze(1), chunks[5].unsqueeze(1),
+            chunks[3].unsqueeze(1),
+            chunks[4].unsqueeze(1),
+            chunks[5].unsqueeze(1),
         );
 
         let h = self.norm1.forward(x) * (Tensor::ones_like(&scale_msa) + &scale_msa) + &shift_msa;
@@ -69,6 +82,7 @@ impl BasicAVTransformerBlock {
 
 impl std::fmt::Debug for BasicAVTransformerBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BasicAVTransformerBlock").finish_non_exhaustive()
+        f.debug_struct("BasicAVTransformerBlock")
+            .finish_non_exhaustive()
     }
 }

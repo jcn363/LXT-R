@@ -12,8 +12,18 @@ impl LatentCond {
     }
 
     /// Create an unconditional latent (no conditioning).
-    pub fn empty(batch: i64, channels: i64, frames: i64, height: i64, width: i64, device: tch::Device) -> Self {
-        let latent = Tensor::zeros([batch, channels, frames, height, width], (tch::Kind::Float, device));
+    pub fn empty(
+        batch: i64,
+        channels: i64,
+        frames: i64,
+        height: i64,
+        width: i64,
+        device: tch::Device,
+    ) -> Self {
+        let latent = Tensor::zeros(
+            [batch, channels, frames, height, width],
+            (tch::Kind::Float, device),
+        );
         Self { latent, mask: None }
     }
 }
@@ -27,7 +37,11 @@ pub struct ReferenceVideo {
 
 impl ReferenceVideo {
     pub fn new(frames: Tensor, start_frame: i64, end_frame: i64) -> Self {
-        Self { frames, start_frame, end_frame }
+        Self {
+            frames,
+            start_frame,
+            end_frame,
+        }
     }
 
     /// Number of reference frames.
@@ -50,7 +64,11 @@ pub struct Keyframe {
 
 impl Keyframe {
     pub fn new(frame_index: i64, latent: Tensor, strength: f64) -> Self {
-        Self { frame_index, latent, strength }
+        Self {
+            frame_index,
+            latent,
+            strength,
+        }
     }
 
     /// Create a hard keyframe (full strength).

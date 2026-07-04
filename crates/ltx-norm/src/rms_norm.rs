@@ -1,5 +1,5 @@
-use tch::Tensor;
 use ltx_types::NORM_EPS;
+use tch::Tensor;
 
 pub struct RMSNorm {
     weight: Tensor,

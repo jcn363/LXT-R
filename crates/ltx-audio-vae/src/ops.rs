@@ -92,10 +92,7 @@ impl AudioProcessor {
 
         let padded = if t % self.chunk_size != 0 {
             let pad_len = num_chunks * self.chunk_size - t;
-            let padding = Tensor::zeros(
-                [b, c, pad_len],
-                (x.kind(), x.device()),
-            );
+            let padding = Tensor::zeros([b, c, pad_len], (x.kind(), x.device()));
             Tensor::cat(&[x, &padding], 2)
         } else {
             x.shallow_clone()

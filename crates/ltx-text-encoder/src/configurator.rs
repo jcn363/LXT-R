@@ -10,8 +10,7 @@ pub fn from_config(
     config: &LTXVTextEncoderConfig,
     tokenizer_path: &str,
 ) -> Result<GemmaTextEncoder, Box<dyn std::error::Error + Send + Sync>> {
-    let tokenizer =
-        LTXVGemmaTokenizer::from_file(tokenizer_path, config.max_text_length as usize)?;
+    let tokenizer = LTXVGemmaTokenizer::from_file(tokenizer_path, config.max_text_length as usize)?;
     Ok(GemmaTextEncoder::new(config, tokenizer))
 }
 

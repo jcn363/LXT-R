@@ -1,6 +1,6 @@
+use ltx_norm::RMSNorm;
 use tch::nn::{Linear, ModuleT};
 use tch::Tensor;
-use ltx_norm::RMSNorm;
 
 use crate::rope::{self, RopeType};
 use crate::sdpa;

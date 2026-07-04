@@ -28,8 +28,26 @@ pub fn make_decoder_block<'a>(
     causal: bool,
 ) -> DecoderBlock {
     let vs = vs.borrow();
-    let conv = make_conv_nd(vs / "conv", 3, in_channels, out_channels, 3, stride, 1, causal, "zeros");
-    let resblock = make_resblock(3, out_channels, out_channels, norm_type, norm_groups, causal, vs / "resblock");
+    let conv = make_conv_nd(
+        vs / "conv",
+        3,
+        in_channels,
+        out_channels,
+        3,
+        stride,
+        1,
+        causal,
+        "zeros",
+    );
+    let resblock = make_resblock(
+        3,
+        out_channels,
+        out_channels,
+        norm_type,
+        norm_groups,
+        causal,
+        vs / "resblock",
+    );
 
     DecoderBlock { conv, resblock }
 }

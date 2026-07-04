@@ -34,9 +34,23 @@ impl UNetMidBlock3D {
     ) -> Self {
         let vs = vs.borrow();
 
-        let resblock1 = ResnetBlock3D::new(vs / "resblock1", channels, channels, norm_type, norm_groups, causal);
+        let resblock1 = ResnetBlock3D::new(
+            vs / "resblock1",
+            channels,
+            channels,
+            norm_type,
+            norm_groups,
+            causal,
+        );
         let attention = SelfAttention3D::new(vs / "attention", channels, num_heads);
-        let resblock2 = ResnetBlock3D::new(vs / "resblock2", channels, channels, norm_type, norm_groups, causal);
+        let resblock2 = ResnetBlock3D::new(
+            vs / "resblock2",
+            channels,
+            channels,
+            norm_type,
+            norm_groups,
+            causal,
+        );
 
         Self {
             resblock1,

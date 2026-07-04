@@ -31,11 +31,7 @@ pub fn get_pixel_coords(
 /// Returns bounds indicating the min/max patch indices in each dimension,
 /// useful for determining which patches need to be processed in a tiled
 /// fashion.
-pub fn get_patch_grid_bounds(
-    latent_t: i64,
-    latent_h: i64,
-    latent_w: i64,
-) -> PatchGridBounds {
+pub fn get_patch_grid_bounds(latent_t: i64, latent_h: i64, latent_w: i64) -> PatchGridBounds {
     PatchGridBounds::new(0, latent_t, 0, latent_h, 0, latent_w)
 }
 
@@ -105,8 +101,12 @@ mod tests {
     #[test]
     fn test_patch_bounds_to_pixel_bounds() {
         let bounds = PatchGridBounds::new(0, 4, 0, 16, 0, 16);
-        let (pt0, pt1, ph0, ph1, pw0, pw1) =
-            patch_bounds_to_pixel_bounds(&bounds, DEFAULT_TIME_SCALE, DEFAULT_HEIGHT_SCALE, DEFAULT_WIDTH_SCALE);
+        let (pt0, pt1, ph0, ph1, pw0, pw1) = patch_bounds_to_pixel_bounds(
+            &bounds,
+            DEFAULT_TIME_SCALE,
+            DEFAULT_HEIGHT_SCALE,
+            DEFAULT_WIDTH_SCALE,
+        );
         assert_eq!((pt0, pt1), (0, 32));
         assert_eq!((ph0, ph1), (0, 512));
         assert_eq!((pw0, pw1), (0, 512));
@@ -114,7 +114,14 @@ mod tests {
 
     #[test]
     fn test_num_patches() {
-        let (t, h, w) = num_patches(64, 512, 512, DEFAULT_TIME_SCALE, DEFAULT_HEIGHT_SCALE, DEFAULT_WIDTH_SCALE);
+        let (t, h, w) = num_patches(
+            64,
+            512,
+            512,
+            DEFAULT_TIME_SCALE,
+            DEFAULT_HEIGHT_SCALE,
+            DEFAULT_WIDTH_SCALE,
+        );
         assert_eq!((t, h, w), (8, 16, 16));
     }
 }

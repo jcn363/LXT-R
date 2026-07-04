@@ -22,10 +22,7 @@ pub struct GemmaTextEncoder {
 }
 
 impl GemmaTextEncoder {
-    pub fn new(
-        config: &LTXVTextEncoderConfig,
-        tokenizer: LTXVGemmaTokenizer,
-    ) -> Self {
+    pub fn new(config: &LTXVTextEncoderConfig, tokenizer: LTXVGemmaTokenizer) -> Self {
         let text_model = Gemma3TextModel::new(&config.gemma3);
         let vision_tower = SigLIPVisionTower::new(&config.siglip);
         let feature_extractor = FeatureExtractor::new(vision_tower);
@@ -75,13 +72,9 @@ impl GemmaTextEncoder {
         let text_hidden = self.encode(text);
         let vision_hidden = self.encode_image(pixel_values);
 
-        let vision_pooled = self
-            .embeddings_processor
-            .mean_pool(&vision_hidden);
+        let vision_pooled = self.embeddings_processor.mean_pool(&vision_hidden);
 
-        let text_projected = self
-            .embeddings_processor
-            .forward(&text_hidden.unsqueeze(1));
+        let text_projected = self.embeddings_processor.forward(&text_hidden.unsqueeze(1));
         let vision_projected = self
             .embeddings_processor
             .forward(&vision_pooled.unsqueeze(1));

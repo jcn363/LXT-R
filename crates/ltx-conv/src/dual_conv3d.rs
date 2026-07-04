@@ -82,7 +82,7 @@ impl DualConv3d {
         // Zero-pad spatial dims (H, W) by (kernel-1)/2 on each side so the
         // spatial conv [1, k, k] preserves spatial resolution.
         let spatial_pad = (self.time_kernel_size - 1) / 2; // e.g. 1 for kernel=3
-        // [W_left, W_right, H_left, H_right, T_left, T_right]
+                                                           // [W_left, W_right, H_left, H_right, T_left, T_right]
         let x = x.pad(
             [spatial_pad, spatial_pad, spatial_pad, spatial_pad, 0, 0],
             "constant",
@@ -101,13 +101,12 @@ impl DualConv3d {
             self.conv_temporal.forward(&Tensor::cat(&[&first, &h], 2))
         } else {
             let half = (self.time_kernel_size - 1) / 2;
-            let first = h
-                .narrow(2, 0, 1)
-                .expand([b, c, half, d4, d5], true);
+            let first = h.narrow(2, 0, 1).expand([b, c, half, d4, d5], true);
             let last = h
                 .narrow(2, h.size()[2] - 1, 1)
                 .expand([b, c, half, d4, d5], true);
-            self.conv_temporal.forward(&Tensor::cat(&[&first, &h, &last], 2))
+            self.conv_temporal
+                .forward(&Tensor::cat(&[&first, &h, &last], 2))
         }
     }
 }

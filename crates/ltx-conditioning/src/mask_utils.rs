@@ -16,9 +16,7 @@ pub fn causal_mask(seq_len: i64, device: tch::Device) -> Tensor {
 pub fn padding_mask(lengths: &[i64], device: tch::Device) -> Tensor {
     let max_len = *lengths.iter().max().unwrap_or(&0);
     let range = Tensor::arange(max_len, (tch::Kind::Int64, device));
-    let lengths_t = Tensor::from_slice(lengths)
-        .to_device(device)
-        .unsqueeze(1);
+    let lengths_t = Tensor::from_slice(lengths).to_device(device).unsqueeze(1);
     // range < lengths_t using comparison method
     range.unsqueeze(0).lt_tensor(&lengths_t)
 }
@@ -30,11 +28,14 @@ pub fn padding_mask(lengths: &[i64], device: tch::Device) -> Tensor {
 pub fn causal_padding_mask(lengths: &[i64], device: tch::Device) -> Tensor {
     let batch = lengths.len() as i64;
     let max_len = *lengths.iter().max().unwrap_or(&0);
-    let causal = causal_mask(max_len, device).unsqueeze(0).expand([batch, max_len, max_len], false);
+    let causal = causal_mask(max_len, device)
+        .unsqueeze(0)
+        .expand([batch, max_len, max_len], false);
     let pad = padding_mask(lengths, device);
     // pad[i][j] is true when position j is valid
     // We want to mask where j >= length_i OR where causal mask is set
-    let pad_mask = pad.unsqueeze(2)
+    let pad_mask = pad
+        .unsqueeze(2)
         .expand([batch, max_len, max_len], false)
         .to_kind(tch::Kind::Bool)
         .logical_not();

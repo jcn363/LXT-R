@@ -42,15 +42,33 @@ impl AsymConv2d {
     fn new(vs: &Path, in_c: i64, out_c: i64, k_h: i64, k_w: i64, s_h: i64, s_w: i64) -> Self {
         let fan_in = in_c * k_h * k_w;
         let std = (2.0 / fan_in as f64).sqrt();
-        let weight = vs.var("weight", &[out_c, in_c, k_h, k_w], tch::nn::init::Init::Randn { mean: 0.0, stdev: std });
+        let weight = vs.var(
+            "weight",
+            &[out_c, in_c, k_h, k_w],
+            tch::nn::init::Init::Randn {
+                mean: 0.0,
+                stdev: std,
+            },
+        );
         let bias = vs.var("bias", &[out_c], tch::nn::init::Init::Const(0.0));
-        Self { weight, bias, stride: [s_h, s_w] }
+        Self {
+            weight,
+            bias,
+            stride: [s_h, s_w],
+        }
     }
 }
 
 impl ModuleT for AsymConv2d {
     fn forward_t(&self, xs: &Tensor, _train: bool) -> Tensor {
-        xs.conv2d(&self.weight, Some(&self.bias), self.stride, [0, 0], [1, 1], 1)
+        xs.conv2d(
+            &self.weight,
+            Some(&self.bias),
+            self.stride,
+            [0, 0],
+            [1, 1],
+            1,
+        )
     }
 }
 
@@ -95,9 +113,20 @@ impl CausalConv2d {
         causal_axis: CausalityAxis,
     ) -> Self {
         let conv: Box<dyn ModuleT> = Box::new(AsymConv2d::new(
-            vs.borrow(), in_channels, out_channels, kernel_time, kernel_freq, stride_time, stride_freq,
+            vs.borrow(),
+            in_channels,
+            out_channels,
+            kernel_time,
+            kernel_freq,
+            stride_time,
+            stride_freq,
         ));
-        Self { conv, causal_axis, kernel_time, kernel_freq }
+        Self {
+            conv,
+            causal_axis,
+            kernel_time,
+            kernel_freq,
+        }
     }
 
     /// Forward pass with explicit causality control.

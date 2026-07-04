@@ -1,5 +1,5 @@
-use tch::Tensor;
 use std::ffi::c_void;
+use tch::Tensor;
 
 /// Handle to a cuBLAS library instance for FP8 GEMM operations.
 ///
@@ -53,7 +53,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "cuBLAS FP8 GEMM")]
     fn test_gemm_fp8_unimplemented() {
-        let handle = CublasFp8Handle { handle: std::ptr::null_mut() };
+        let handle = CublasFp8Handle {
+            handle: std::ptr::null_mut(),
+        };
         let a = Tensor::zeros([2, 3], (tch::Kind::Float, tch::Device::Cpu));
         let b = Tensor::zeros([3, 4], (tch::Kind::Float, tch::Device::Cpu));
         let _ = handle.gemm_fp8(&a, &b, 1.0, 1.0, tch::Kind::Float);

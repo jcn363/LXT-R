@@ -6,7 +6,7 @@ use ltx_types::constants::ROPE_THETA;
 pub fn get_timestep_embedding(timesteps: &Tensor, dim: i64, max_period: i64) -> Tensor {
     let half = dim / 2;
     let freqs = Tensor::arange_start(0i64, half, (tch::Kind::Float, timesteps.device()));
-    let freqs = (-max_period as f64).ln() * freqs / (half as f64 - 1.0);
+    let freqs = -(max_period as f64).ln() * freqs / (half as f64 - 1.0);
     let freqs = freqs.exp();
     let args = timesteps.unsqueeze(1).to_kind(tch::Kind::Float) * freqs.unsqueeze(0);
     Tensor::cat(&[args.sin(), args.cos()], 1)

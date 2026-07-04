@@ -1,4 +1,4 @@
-use ltx_conditioning::{LatentCond, ReferenceVideo, Keyframe};
+use ltx_conditioning::{Keyframe, LatentCond, ReferenceVideo};
 use tch::{Device, Kind, Tensor};
 
 #[test]

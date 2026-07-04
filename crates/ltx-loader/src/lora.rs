@@ -58,10 +58,16 @@ mod tests {
     #[test]
     fn test_apply_loras_fp32() {
         let mut base = HashMap::new();
-        base.insert("layer.weight".to_string(), Tensor::ones([4, 4], (tch::Kind::Float, tch::Device::Cpu)));
+        base.insert(
+            "layer.weight".to_string(),
+            Tensor::ones([4, 4], (tch::Kind::Float, tch::Device::Cpu)),
+        );
 
         let mut deltas = HashMap::new();
-        deltas.insert("layer.weight".to_string(), Tensor::ones([4, 4], (tch::Kind::Float, tch::Device::Cpu)) * 0.1);
+        deltas.insert(
+            "layer.weight".to_string(),
+            Tensor::ones([4, 4], (tch::Kind::Float, tch::Device::Cpu)) * 0.1,
+        );
 
         apply_loras(&mut base, &deltas, 1.0, false);
 
@@ -73,10 +79,16 @@ mod tests {
     #[test]
     fn test_apply_loras_skips_missing() {
         let mut base = HashMap::new();
-        base.insert("a.weight".to_string(), Tensor::ones([2, 2], (tch::Kind::Float, tch::Device::Cpu)));
+        base.insert(
+            "a.weight".to_string(),
+            Tensor::ones([2, 2], (tch::Kind::Float, tch::Device::Cpu)),
+        );
 
         let mut deltas = HashMap::new();
-        deltas.insert("b.weight".to_string(), Tensor::ones([2, 2], (tch::Kind::Float, tch::Device::Cpu)));
+        deltas.insert(
+            "b.weight".to_string(),
+            Tensor::ones([2, 2], (tch::Kind::Float, tch::Device::Cpu)),
+        );
 
         apply_loras(&mut base, &deltas, 1.0, false);
         // base should be unchanged

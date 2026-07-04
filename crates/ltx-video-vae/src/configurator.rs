@@ -5,7 +5,7 @@ use tch::nn::Path;
 
 use ltx_types::{NormLayerType, VAE_NORM_NUM_GROUPS};
 
-use crate::{VideoVAE, VideoEncoder, VideoDecoder};
+use crate::{VideoDecoder, VideoEncoder, VideoVAE};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct VideoVAEConfig {

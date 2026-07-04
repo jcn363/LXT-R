@@ -1,4 +1,4 @@
-use ltx_conv::{make_conv_nd, make_causal_conv2d, CausalityAxis};
+use ltx_conv::{make_causal_conv2d, make_conv_nd, CausalityAxis};
 use tch::nn::ModuleT;
 use tch::{Device, Kind, Tensor};
 

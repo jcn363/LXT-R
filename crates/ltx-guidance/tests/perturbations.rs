@@ -73,7 +73,8 @@ fn test_perturbation_config_deserialize() {
 
 #[test]
 fn test_stg_config_deserialize() {
-    let json = r#"{"spatial": true, "temporal": false, "spatial_scale": 0.1, "temporal_scale": 0.0}"#;
+    let json =
+        r#"{"spatial": true, "temporal": false, "spatial_scale": 0.1, "temporal_scale": 0.0}"#;
     let cfg: StgPerturbationConfig = serde_json::from_str(json).unwrap();
     assert!(cfg.spatial);
     assert!(!cfg.temporal);

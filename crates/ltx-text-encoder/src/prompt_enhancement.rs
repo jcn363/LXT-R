@@ -12,10 +12,10 @@ impl Default for PromptEnhancer {
 impl PromptEnhancer {
     pub fn new() -> Self {
         Self {
-            system_prompt: String::from(
-                "You are a helpful assistant for video generation.",
+            system_prompt: String::from("You are a helpful assistant for video generation."),
+            user_template: String::from(
+                "<bos><start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n",
             ),
-            user_template: String::from("<bos><start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"),
         }
     }
 

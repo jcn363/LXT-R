@@ -19,7 +19,10 @@ pub struct VideoLatentPatchifier {
 
 impl VideoLatentPatchifier {
     pub fn new(latent_shape: VideoLatentShape, patch_size: [i64; 3]) -> Self {
-        Self { latent_shape, patch_size }
+        Self {
+            latent_shape,
+            patch_size,
+        }
     }
 
     /// Create from channel count and patch sizes, deriving latent shape from
@@ -39,7 +42,10 @@ impl VideoLatentPatchifier {
             height / patch_size[1],
             width / patch_size[2],
         );
-        Self { latent_shape, patch_size }
+        Self {
+            latent_shape,
+            patch_size,
+        }
     }
 
     /// Patch size `[p1, p2, p3]` for temporal, height, width axes.
@@ -73,7 +79,12 @@ impl VideoLatentPatchifier {
 
 impl Patchifier for VideoLatentPatchifier {
     fn patchify(&self, x: &Tensor) -> Tensor {
-        ops::patchify_5d(x, self.patch_size[0], self.patch_size[1], self.patch_size[2])
+        ops::patchify_5d(
+            x,
+            self.patch_size[0],
+            self.patch_size[1],
+            self.patch_size[2],
+        )
     }
 
     fn unpatchify(&self, x: &Tensor, shape: &[i64]) -> Tensor {

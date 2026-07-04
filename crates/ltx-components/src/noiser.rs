@@ -17,12 +17,7 @@ impl GaussianNoiser {
     }
 
     /// Compute the denoised prediction from a noisy sample and velocity.
-    pub fn denoise(
-        &self,
-        noisy: &Tensor,
-        noise: &Tensor,
-        sigma: f64,
-    ) -> Tensor {
+    pub fn denoise(&self, noisy: &Tensor, noise: &Tensor, sigma: f64) -> Tensor {
         let sigma_t = Tensor::from_slice(&[sigma as f32])
             .to_kind(noisy.kind())
             .to_device(noisy.device());

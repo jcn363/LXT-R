@@ -22,9 +22,9 @@ impl Modality {
 
     pub fn ndim(&self) -> i64 {
         match self {
-            Modality::Video => 5,  // B, C, F, H, W
-            Modality::Audio => 4,  // B, C, T, F
-            Modality::Image => 4,  // B, C, H, W
+            Modality::Video => 5, // B, C, F, H, W
+            Modality::Audio => 4, // B, C, T, F
+            Modality::Image => 4, // B, C, H, W
         }
     }
 }

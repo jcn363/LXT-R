@@ -77,3 +77,57 @@ fn test_blur_downsample_3d_input_panics() {
     let x = Tensor::randn([4, 16, 16], (Kind::Float, Device::Cpu));
     let _ = bd.forward(&x);
 }
+
+// ── Bug verification: Gaussian kernel value tests ──────────────────────
+
+/// Bug verification: the 2D Gaussian kernel must be [K, K], not a scalar.
+#[test]
+fn test_gaussian_kernel_shape() {
+    for k in [3, 5, 7] {
+        let kernel = BlurDownsample::make_gaussian_kernel(k);
+        assert_eq!(kernel.size(), vec![k, k], "kernel size for k={k}");
+    }
+}
+
+/// Bug verification: the 2D Gaussian kernel must sum to 1.0 (valid probability distribution).
+#[test]
+fn test_gaussian_kernel_sums_to_one() {
+    for k in [3, 5, 7] {
+        let kernel = BlurDownsample::make_gaussian_kernel(k);
+        let sum = kernel.sum(Kind::Float).double_value(&[]);
+        assert!(
+            (sum - 1.0).abs() < 1e-5,
+            "kernel k={k} sums to {sum}, expected 1.0"
+        );
+    }
+}
+
+/// Bug verification: the 2D Gaussian kernel must be symmetric.
+#[test]
+fn test_gaussian_kernel_symmetry() {
+    let kernel = BlurDownsample::make_gaussian_kernel(5);
+    // K[i,j] == K[K-1-i, K-1-j] (centrally symmetric)
+    for i in 0..5 {
+        for j in 0..5 {
+            let a = kernel.get(i).get(j).double_value(&[]);
+            let b = kernel.get(4 - i).get(4 - j).double_value(&[]);
+            assert!(
+                (a - b).abs() < 1e-7,
+                "kernel not symmetric: K[{i},{j}]={a} != K[{},{j}]={b}",
+                4 - i,
+            );
+        }
+    }
+}
+
+/// Bug verification: the center element must be the maximum.
+#[test]
+fn test_gaussian_kernel_center_is_max() {
+    let kernel = BlurDownsample::make_gaussian_kernel(5);
+    let center = kernel.get(2).get(2).double_value(&[]);
+    let max_val = kernel.max().double_value(&[]);
+    assert!(
+        (center - max_val).abs() < 1e-7,
+        "center={center} is not the max={max_val}"
+    );
+}

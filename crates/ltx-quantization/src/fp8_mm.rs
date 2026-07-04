@@ -1,7 +1,7 @@
-use tch::Tensor;
 use tch::nn::Module;
+use tch::Tensor;
 
-use ltx_fp8::{quantize_weight_to_fp8_per_tensor, dequantize_fp8};
+use ltx_fp8::{dequantize_fp8, quantize_weight_to_fp8_per_tensor};
 
 /// FP8 linear layer — quantizes weights to FP8 on forward pass.
 #[derive(Debug)]

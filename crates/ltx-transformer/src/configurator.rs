@@ -25,8 +25,12 @@ pub fn from_config(args: &TransformerArgs, vs: &tch::nn::Path) -> LTXModel {
         .collect();
 
     let norm_out = RMSNorm::default_eps(args.hidden_dim, vs.device());
-    let proj_out =
-        tch::nn::linear(vs / "proj_out", args.hidden_dim, args.hidden_dim, Default::default());
+    let proj_out = tch::nn::linear(
+        vs / "proj_out",
+        args.hidden_dim,
+        args.hidden_dim,
+        Default::default(),
+    );
 
     LTXModel::new(blocks, norm_out, proj_out)
 }

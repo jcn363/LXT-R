@@ -24,7 +24,13 @@ fn test_apply_rotary_emb_preserves_shapes() {
     // apply_rotary_emb operates on per-head tensors: [B, T, head_dim]
     let q = Tensor::randn([batch, seq_len, head_dim], (Kind::Float, Device::Cpu));
     let k = Tensor::randn([batch, seq_len, head_dim], (Kind::Float, Device::Cpu));
-    let (cos, sin) = precompute_freqs_cis(head_dim, seq_len, 10_000.0, RopeType::Interleaved, Device::Cpu);
+    let (cos, sin) = precompute_freqs_cis(
+        head_dim,
+        seq_len,
+        10_000.0,
+        RopeType::Interleaved,
+        Device::Cpu,
+    );
     let (q_rot, k_rot) = apply_rotary_emb(&q, &k, &cos, &sin, RopeType::Interleaved);
     assert_eq!(q_rot.size(), q.size());
     assert_eq!(k_rot.size(), k.size());
@@ -38,7 +44,8 @@ fn test_apply_rotary_emb_split() {
     let head_dim = 32;
     let q = Tensor::randn([batch, seq_len, head_dim], (Kind::Float, Device::Cpu));
     let k = Tensor::randn([batch, seq_len, head_dim], (Kind::Float, Device::Cpu));
-    let (cos, sin) = precompute_freqs_cis(head_dim, seq_len, 10_000.0, RopeType::Split, Device::Cpu);
+    let (cos, sin) =
+        precompute_freqs_cis(head_dim, seq_len, 10_000.0, RopeType::Split, Device::Cpu);
     let (q_rot, k_rot) = apply_rotary_emb(&q, &k, &cos, &sin, RopeType::Split);
     assert_eq!(q_rot.size(), q.size());
     assert_eq!(k_rot.size(), k.size());
@@ -49,7 +56,13 @@ fn test_rope_preserves_norm() {
     let seq_len = 8;
     let head_dim = 32;
     let q = Tensor::randn([1, seq_len, head_dim], (Kind::Float, Device::Cpu));
-    let (cos, sin) = precompute_freqs_cis(head_dim, seq_len, 10_000.0, RopeType::Interleaved, Device::Cpu);
+    let (cos, sin) = precompute_freqs_cis(
+        head_dim,
+        seq_len,
+        10_000.0,
+        RopeType::Interleaved,
+        Device::Cpu,
+    );
     let (q_rot, _) = apply_rotary_emb(&q, &q, &cos, &sin, RopeType::Interleaved);
     // RoPE is norm-preserving
     let orig_norm = q.norm();

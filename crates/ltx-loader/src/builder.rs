@@ -29,9 +29,7 @@ impl SingleGPUModelBuilder {
     /// Load a state dict from a file path, auto-detecting format.
     #[must_use = "caller must handle checkpoint load error"]
     pub fn load_state_dict(&self, path: &Path) -> Result<StateDict, Box<dyn std::error::Error>> {
-        let ext = path.extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         let state_dict = if ext == "safetensors" {
             let loader = SafetensorsStateDictLoader::new();
@@ -83,7 +81,10 @@ mod tests {
     fn test_prepare_state_dict() {
         let builder = SingleGPUModelBuilder::new(tch::Device::Cpu, tch::Kind::BFloat16);
         let mut sd = std::collections::HashMap::new();
-        sd.insert("w".to_string(), Tensor::ones([2, 2], (tch::Kind::Float, tch::Device::Cpu)));
+        sd.insert(
+            "w".to_string(),
+            Tensor::ones([2, 2], (tch::Kind::Float, tch::Device::Cpu)),
+        );
 
         let prepared = builder.prepare_state_dict(sd);
         let w = prepared.get("w").unwrap();

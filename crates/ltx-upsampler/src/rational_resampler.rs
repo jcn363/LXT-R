@@ -34,28 +34,12 @@ impl std::fmt::Debug for SpatialRationalResampler {
 }
 
 impl SpatialRationalResampler {
-    pub fn new(
-        vs: tch::nn::Path,
-        channels: i64,
-        num: i64,
-        den: i64,
-        norm_groups: i64,
-    ) -> Self {
+    pub fn new(vs: tch::nn::Path, channels: i64, num: i64, den: i64, norm_groups: i64) -> Self {
         assert!(num > 0 && den > 0, "num and den must be positive");
         assert!(num != den, "num == den means no resampling needed");
 
         let norm = build_norm_layer(NormLayerType::Group, channels, norm_groups);
-        let conv = make_conv_nd(
-            vs / "conv",
-            3,
-            channels,
-            channels,
-            3,
-            1,
-            1,
-            false,
-            "zeros",
-        );
+        let conv = make_conv_nd(vs / "conv", 3, channels, channels, 3, 1, 1, false, "zeros");
 
         Self {
             num,
@@ -111,7 +95,9 @@ impl SpatialRationalResampler {
         // Reshape to 4D for adaptive_avg_pool2d, process per-frame
         let x_4d = x.reshape([b * t, c, h, w]);
         let pooled = x_4d.adaptive_avg_pool2d([h_out, w_out]);
-        let (_, _, h_out, w_out) = pooled.size4().expect("adaptive_avg_pool2d: output must be 4D");
+        let (_, _, h_out, w_out) = pooled
+            .size4()
+            .expect("adaptive_avg_pool2d: output must be 4D");
         pooled
             .reshape([b, t, c, h_out, w_out])
             .permute([0, 2, 1, 3, 4])

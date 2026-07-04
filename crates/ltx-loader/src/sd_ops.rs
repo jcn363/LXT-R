@@ -41,7 +41,8 @@ impl SDOps {
 
     /// Merge two state dicts, with `override_dict` taking precedence on key conflicts.
     pub fn merge(base: &StateDict, override_dict: &StateDict) -> StateDict {
-        let mut result: StateDict = base.iter()
+        let mut result: StateDict = base
+            .iter()
             .map(|(k, v)| (k.clone(), v.shallow_clone()))
             .collect();
         for (k, v) in override_dict {
@@ -52,7 +53,8 @@ impl SDOps {
 
     /// Find keys present in `source` but missing from `target`.
     pub fn missing_keys(source: &StateDict, target: &StateDict) -> Vec<String> {
-        source.keys()
+        source
+            .keys()
             .filter(|k| !target.contains_key(*k))
             .cloned()
             .collect()
@@ -94,7 +96,12 @@ mod tests {
 
     fn make_sd(keys: &[&str]) -> StateDict {
         keys.iter()
-            .map(|k| (k.to_string(), Tensor::zeros([2, 2], (tch::Kind::Float, tch::Device::Cpu))))
+            .map(|k| {
+                (
+                    k.to_string(),
+                    Tensor::zeros([2, 2], (tch::Kind::Float, tch::Device::Cpu)),
+                )
+            })
             .collect()
     }
 
@@ -133,9 +140,15 @@ mod tests {
     #[test]
     fn test_shape_mismatches() {
         let mut a = HashMap::new();
-        a.insert("w".to_string(), Tensor::zeros([2, 3], (tch::Kind::Float, tch::Device::Cpu)));
+        a.insert(
+            "w".to_string(),
+            Tensor::zeros([2, 3], (tch::Kind::Float, tch::Device::Cpu)),
+        );
         let mut b = HashMap::new();
-        b.insert("w".to_string(), Tensor::zeros([2, 4], (tch::Kind::Float, tch::Device::Cpu)));
+        b.insert(
+            "w".to_string(),
+            Tensor::zeros([2, 4], (tch::Kind::Float, tch::Device::Cpu)),
+        );
         let mismatches = SDOps::shape_mismatches(&a, &b);
         assert_eq!(mismatches.len(), 1);
     }

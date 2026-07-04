@@ -36,24 +36,32 @@ fn test_create_cross_mask_blocked_regions() {
 
     // Top-right block (text→vision) should be True (masked)
     let tr = mask.narrow(0, 0, text_len).narrow(1, text_len, vision_len);
-    assert_eq!(tr.sum(tch::Kind::Float).double_value(&[]), (text_len * vision_len) as f64);
+    assert_eq!(
+        tr.sum(tch::Kind::Float).double_value(&[]),
+        (text_len * vision_len) as f64
+    );
 
     // Bottom-left block (vision→text) should be True (masked)
     let bl = mask.narrow(0, text_len, vision_len).narrow(1, 0, text_len);
-    assert_eq!(bl.sum(tch::Kind::Float).double_value(&[]), (text_len * vision_len) as f64);
+    assert_eq!(
+        bl.sum(tch::Kind::Float).double_value(&[]),
+        (text_len * vision_len) as f64
+    );
 
     // Top-left block (text→text) should be False (not masked)
     let tl = mask.narrow(0, 0, text_len).narrow(1, 0, text_len);
     assert_eq!(tl.sum(tch::Kind::Float).double_value(&[]), 0.0);
 
     // Bottom-right block (vision→vision) should be False (not masked)
-    let br = mask.narrow(0, text_len, vision_len).narrow(1, text_len, vision_len);
+    let br = mask
+        .narrow(0, text_len, vision_len)
+        .narrow(1, text_len, vision_len);
     assert_eq!(br.sum(tch::Kind::Float).double_value(&[]), 0.0);
 }
 
 #[test]
 fn test_concatenate_default() {
-    let conn = EmbeddingsConnector::default();
+    let conn = EmbeddingsConnector;
     let text = Tensor::randn([1, 2, 16], (Kind::Float, Device::Cpu));
     let vision = Tensor::randn([1, 3, 16], (Kind::Float, Device::Cpu));
     let combined = conn.concatenate(&text, &vision);

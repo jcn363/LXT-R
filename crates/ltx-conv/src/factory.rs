@@ -74,7 +74,14 @@ pub fn make_causal_conv2d<'a>(
     stride: i64,
     causal_axis: CausalityAxis,
 ) -> CausalConv2d {
-    CausalConv2d::new(vs, in_channels, out_channels, kernel_size, stride, causal_axis)
+    CausalConv2d::new(
+        vs,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        causal_axis,
+    )
 }
 
 /// Create a 2D transposed convolution (ConvTranspose2d) for upsampling.
@@ -135,7 +142,14 @@ impl AsymConvTranspose2d {
         let fan_in = in_channels * kernel_time * kernel_freq;
         let std = (2.0 / fan_in as f64).sqrt();
         // Weight shape for transposed conv: [in_channels, out_channels, kH, kW]
-        let weight = vs.var("weight", &[in_channels, out_channels, kernel_time, kernel_freq], tch::nn::init::Init::Randn { mean: 0.0, stdev: std });
+        let weight = vs.var(
+            "weight",
+            &[in_channels, out_channels, kernel_time, kernel_freq],
+            tch::nn::init::Init::Randn {
+                mean: 0.0,
+                stdev: std,
+            },
+        );
         let bias = vs.var("bias", &[out_channels], tch::nn::init::Init::Const(0.0));
         Self {
             weight,

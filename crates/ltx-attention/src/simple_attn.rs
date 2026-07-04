@@ -1,6 +1,6 @@
+use ltx_types::NORM_EPS;
 use tch::nn::{Conv2D, ModuleT};
 use tch::Tensor;
-use ltx_types::NORM_EPS;
 
 pub struct SimpleAttnBlock {
     norm: tch::nn::GroupNorm,

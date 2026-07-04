@@ -94,8 +94,15 @@ impl BlurDownsample {
         // Blur: depthwise conv with fixed Gaussian kernel (no learnable params)
         let gaussian = Self::make_gaussian_kernel_4d(k, c);
         let groups = c;
-        let blurred =
-            tch::Tensor::conv2d(x, &gaussian, None::<&Tensor>, [1, 1], [1, 1], [1, 1], groups);
+        let blurred = tch::Tensor::conv2d(
+            x,
+            &gaussian,
+            None::<&Tensor>,
+            [1, 1],
+            [1, 1],
+            [1, 1],
+            groups,
+        );
 
         // Strided conv with learnable weights
         self.conv.forward_t(&blurred, false)
@@ -112,12 +119,11 @@ impl BlurDownsample {
     }
 
     /// Create a 1D Gaussian kernel of the given size, then outer-product to 2D.
-    fn make_gaussian_kernel(size: i64) -> Tensor {
+    pub fn make_gaussian_kernel(size: i64) -> Tensor {
         assert!(size % 2 == 1, "kernel size must be odd, got {size}");
         let sigma = size as f64 / 6.0;
         let half = size / 2;
-        let coords =
-            Tensor::arange_start(-half, half + 1, (tch::Kind::Float, tch::Device::Cpu));
+        let coords = Tensor::arange_start(-half, half + 1, (tch::Kind::Float, tch::Device::Cpu));
         let gaussian_1d = (&coords * &coords * (-0.5 / (sigma * sigma))).exp();
         let gaussian_1d = &gaussian_1d / gaussian_1d.sum(tch::Kind::Float);
         // Outer product for 2D kernel: [3,1] * [1,3] = [3,3]

@@ -92,7 +92,8 @@ impl Vocoder {
                 dilation: 1,
                 ..Default::default()
             };
-            let conv = tch::nn::conv_transpose1d(vs / format!("upsample_{i}"), prev_ch, out_ch, 4, cfg);
+            let conv =
+                tch::nn::conv_transpose1d(vs / format!("upsample_{i}"), prev_ch, out_ch, 4, cfg);
             upsample_convs.push(ConvTranspose1dModule(conv));
             prev_ch = out_ch;
         }
@@ -182,10 +183,10 @@ mod tests {
         let root = vs.root();
         let vocoder = Vocoder::new(
             root / "vocoder",
-            64,                    // in_channels
-            &[128, 64],            // upsample_channels (2 upsample layers)
-            64,                    // res_block_channels
-            2,                     // num_res_blocks
+            64,         // in_channels
+            &[128, 64], // upsample_channels (2 upsample layers)
+            64,         // res_block_channels
+            2,          // num_res_blocks
             ltx_types::LRELU_SLOPE,
         );
 

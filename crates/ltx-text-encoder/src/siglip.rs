@@ -22,8 +22,18 @@ impl SigLIPVisionMLP {
             ..Default::default()
         };
         Self {
-            fc1: tch::nn::linear(&root / "fc1", config.hidden_size, config.intermediate_size, linear_cfg),
-            fc2: tch::nn::linear(&root / "fc2", config.intermediate_size, config.hidden_size, linear_cfg),
+            fc1: tch::nn::linear(
+                &root / "fc1",
+                config.hidden_size,
+                config.intermediate_size,
+                linear_cfg,
+            ),
+            fc2: tch::nn::linear(
+                &root / "fc2",
+                config.intermediate_size,
+                config.hidden_size,
+                linear_cfg,
+            ),
         }
     }
 
@@ -53,10 +63,30 @@ impl SigLIPVisionAttention {
             ..Default::default()
         };
         Self {
-            q_proj: tch::nn::linear(&root / "q_proj", config.hidden_size, config.hidden_size, linear_cfg),
-            k_proj: tch::nn::linear(&root / "k_proj", config.hidden_size, config.hidden_size, linear_cfg),
-            v_proj: tch::nn::linear(&root / "v_proj", config.hidden_size, config.hidden_size, linear_cfg),
-            out_proj: tch::nn::linear(&root / "out_proj", config.hidden_size, config.hidden_size, linear_cfg),
+            q_proj: tch::nn::linear(
+                &root / "q_proj",
+                config.hidden_size,
+                config.hidden_size,
+                linear_cfg,
+            ),
+            k_proj: tch::nn::linear(
+                &root / "k_proj",
+                config.hidden_size,
+                config.hidden_size,
+                linear_cfg,
+            ),
+            v_proj: tch::nn::linear(
+                &root / "v_proj",
+                config.hidden_size,
+                config.hidden_size,
+                linear_cfg,
+            ),
+            out_proj: tch::nn::linear(
+                &root / "out_proj",
+                config.hidden_size,
+                config.hidden_size,
+                linear_cfg,
+            ),
             num_heads: config.num_attention_heads,
             head_dim,
         }
@@ -133,19 +163,16 @@ pub struct SigLIPVisionTower {
 impl SigLIPVisionTower {
     pub fn new(config: &SigLIPConfigData) -> Self {
         let device = tch::Device::Cpu;
-        let num_patches = (config.image_size / config.patch_size)
-            * (config.image_size / config.patch_size);
+        let num_patches =
+            (config.image_size / config.patch_size) * (config.image_size / config.patch_size);
         let patch_embed_weight = Tensor::randn(
-            [
-                config.hidden_size,
-                3,
-                config.patch_size,
-                config.patch_size,
-            ],
+            [config.hidden_size, 3, config.patch_size, config.patch_size],
             (tch::Kind::Float, device),
         );
-        let position_embed_weight =
-            Tensor::randn([1, num_patches + 1, config.hidden_size], (tch::Kind::Float, device));
+        let position_embed_weight = Tensor::randn(
+            [1, num_patches + 1, config.hidden_size],
+            (tch::Kind::Float, device),
+        );
 
         let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
         for _ in 0..config.num_hidden_layers {

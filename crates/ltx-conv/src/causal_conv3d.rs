@@ -61,10 +61,7 @@ impl CausalConv3d {
         let spatial_pad = (self.time_kernel_size - 1) / 2; // e.g. 1 for kernel=3
         if causal {
             let first_frame = x.narrow(2, 0, 1);
-            let pad = first_frame.expand(
-                [b, c, self.time_kernel_size - 1, h, w],
-                true,
-            );
+            let pad = first_frame.expand([b, c, self.time_kernel_size - 1, h, w], true);
             let x_padded = Tensor::cat(&[&pad, x], 2);
             // Zero-pad spatial dims: [W_left, W_right, H_left, H_right, T_left, T_right]
             let x_padded = x_padded.pad(
@@ -75,9 +72,7 @@ impl CausalConv3d {
             self.conv.forward(&x_padded)
         } else {
             let half = (self.time_kernel_size - 1) / 2;
-            let first = x
-                .narrow(2, 0, 1)
-                .expand([b, c, half, h, w], true);
+            let first = x.narrow(2, 0, 1).expand([b, c, half, h, w], true);
             let last = x
                 .narrow(2, x.size()[2] - 1, 1)
                 .expand([b, c, half, h, w], true);

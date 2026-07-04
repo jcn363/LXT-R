@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::primitives::StateDict;
-use crate::safetensors_loader::SafetensorsStateDictLoader;
 use crate::primitives::StateDictLoader;
+use crate::safetensors_loader::SafetensorsStateDictLoader;
 
 /// Registry mapping model names to their checkpoint paths and loaders.
 pub struct StateDictRegistry {
@@ -31,7 +31,8 @@ impl StateDictRegistry {
 
     /// Register a model with its checkpoint path.
     pub fn register(&mut self, name: &str, path: PathBuf, format: CheckpointFormat) {
-        self.entries.insert(name.to_string(), RegistryEntry { path, format });
+        self.entries
+            .insert(name.to_string(), RegistryEntry { path, format });
     }
 
     /// Get the checkpoint path for a model.
@@ -42,7 +43,9 @@ impl StateDictRegistry {
     /// Load a state dict by model name.
     #[must_use = "caller must handle registry load error"]
     pub fn load(&self, name: &str) -> Result<StateDict, Box<dyn std::error::Error>> {
-        let entry = self.entries.get(name)
+        let entry = self
+            .entries
+            .get(name)
             .ok_or_else(|| format!("Model '{}' not registered", name))?;
 
         let loader: Box<dyn StateDictLoader> = match entry.format {
@@ -86,8 +89,16 @@ mod tests {
     #[test]
     fn test_registry_register_and_list() {
         let mut reg = StateDictRegistry::new();
-        reg.register("model_a", PathBuf::from("/tmp/a.safetensors"), CheckpointFormat::Safetensors);
-        reg.register("model_b", PathBuf::from("/tmp/b.safetensors"), CheckpointFormat::Safetensors);
+        reg.register(
+            "model_a",
+            PathBuf::from("/tmp/a.safetensors"),
+            CheckpointFormat::Safetensors,
+        );
+        reg.register(
+            "model_b",
+            PathBuf::from("/tmp/b.safetensors"),
+            CheckpointFormat::Safetensors,
+        );
 
         let mut list = reg.list();
         list.sort();
@@ -97,7 +108,11 @@ mod tests {
     #[test]
     fn test_registry_contains() {
         let mut reg = StateDictRegistry::new();
-        reg.register("test", PathBuf::from("/tmp/test.safetensors"), CheckpointFormat::Auto);
+        reg.register(
+            "test",
+            PathBuf::from("/tmp/test.safetensors"),
+            CheckpointFormat::Auto,
+        );
         assert!(reg.contains("test"));
         assert!(!reg.contains("other"));
     }
@@ -105,7 +120,11 @@ mod tests {
     #[test]
     fn test_registry_unregister() {
         let mut reg = StateDictRegistry::new();
-        reg.register("test", PathBuf::from("/tmp/test.safetensors"), CheckpointFormat::Safetensors);
+        reg.register(
+            "test",
+            PathBuf::from("/tmp/test.safetensors"),
+            CheckpointFormat::Safetensors,
+        );
         assert!(reg.unregister("test"));
         assert!(!reg.contains("test"));
         assert!(!reg.unregister("test"));

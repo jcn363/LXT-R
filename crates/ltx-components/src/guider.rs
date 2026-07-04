@@ -1,6 +1,6 @@
 use tch::Tensor;
 
-use ltx_types::{Guider, utils::projection_coef};
+use ltx_types::{utils::projection_coef, Guider};
 
 /// Classifier-Free Guidance: interpolates conditional and unconditional predictions.
 pub struct CFG {
@@ -31,7 +31,10 @@ pub struct CFGDynamic {
 
 impl CFGDynamic {
     pub fn new(base_scale: f64, min_scale: f64) -> Self {
-        Self { base_scale, min_scale }
+        Self {
+            base_scale,
+            min_scale,
+        }
     }
 }
 
@@ -55,13 +58,19 @@ pub struct STG {
 
 impl STG {
     pub fn new(spatial_scale: f64, temporal_scale: f64) -> Self {
-        Self { spatial_scale, temporal_scale }
+        Self {
+            spatial_scale,
+            temporal_scale,
+        }
     }
 }
 
 impl Default for STG {
     fn default() -> Self {
-        Self { spatial_scale: 7.5, temporal_scale: 3.0 }
+        Self {
+            spatial_scale: 7.5,
+            temporal_scale: 3.0,
+        }
     }
 }
 
@@ -86,13 +95,21 @@ pub struct APG {
 
 impl APG {
     pub fn new(scale: f64, momentum: f64) -> Self {
-        Self { scale, momentum, previous_delta: None }
+        Self {
+            scale,
+            momentum,
+            previous_delta: None,
+        }
     }
 }
 
 impl Default for APG {
     fn default() -> Self {
-        Self { scale: 7.5, momentum: 0.0, previous_delta: None }
+        Self {
+            scale: 7.5,
+            momentum: 0.0,
+            previous_delta: None,
+        }
     }
 }
 
@@ -128,7 +145,11 @@ pub struct MultiModal {
 
 impl MultiModal {
     pub fn new(guiders: Vec<Box<dyn Guider>>, weights: Vec<f64>) -> Self {
-        assert_eq!(guiders.len(), weights.len(), "guiders and weights must match");
+        assert_eq!(
+            guiders.len(),
+            weights.len(),
+            "guiders and weights must match"
+        );
         Self { guiders, weights }
     }
 }

@@ -7,8 +7,7 @@ use tch::Tensor;
 ///
 /// THE ONLY FP8 dequantization implementation in the LTX codebase.
 pub fn dequantize_fp8(weight: &Tensor, scale: &Tensor, target: tch::Kind) -> Tensor {
-    (weight.to_kind(tch::Kind::Float) * scale.to_kind(tch::Kind::Float))
-        .to_kind(target)
+    (weight.to_kind(tch::Kind::Float) * scale.to_kind(tch::Kind::Float)).to_kind(target)
 }
 
 #[cfg(test)]

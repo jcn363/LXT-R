@@ -14,11 +14,19 @@ pub fn make_attention(
 ) -> Result<Box<dyn ModuleT + Send>, String> {
     match attn_type {
         "transformer" => Ok(Box::new(TransformerAttention::new(
-            dim, heads, head_dim, context_dim, rope_type,
+            dim,
+            heads,
+            head_dim,
+            context_dim,
+            rope_type,
         ))),
         "simple" => Ok(Box::new(SimpleAttnBlock::new(dim))),
         "gated" => Ok(Box::new(TransformerAttention::new_gated(
-            dim, heads, head_dim, context_dim, rope_type,
+            dim,
+            heads,
+            head_dim,
+            context_dim,
+            rope_type,
         ))),
         _ => Err(format!("Unknown attention type: {}", attn_type)),
     }

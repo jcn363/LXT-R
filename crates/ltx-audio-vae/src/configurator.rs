@@ -76,7 +76,10 @@ impl AudioEncoder {
     pub fn new<'a>(vs: impl Borrow<Path<'a>>, config: &AudioVAEConfig) -> Self {
         let vs = vs.borrow();
         let first_ch = config.encoder_channels[0];
-        let last_ch = *config.encoder_channels.last().expect("encoder_channels should not be empty");
+        let last_ch = *config
+            .encoder_channels
+            .last()
+            .expect("encoder_channels should not be empty");
 
         let conv_in = Conv2DModule(tch::nn::conv2d(
             vs / "conv_in",
@@ -92,7 +95,11 @@ impl AudioEncoder {
         let num_stages = config.encoder_channels.len();
         let mut downsample_stages = Vec::with_capacity(num_stages);
         for i in 0..num_stages {
-            let in_ch = if i == 0 { first_ch } else { config.encoder_channels[i - 1] };
+            let in_ch = if i == 0 {
+                first_ch
+            } else {
+                config.encoder_channels[i - 1]
+            };
             let out_ch = config.encoder_channels[i];
 
             let resblock = ResnetBlock2D::new(
@@ -109,7 +116,10 @@ impl AudioEncoder {
                     vs / format!("down_{i}") / "downsample",
                     out_ch,
                     out_ch,
-                    4, 1, 2, 1,
+                    4,
+                    1,
+                    2,
+                    1,
                     CausalityAxis::Time,
                 ))
             } else {
@@ -137,7 +147,13 @@ impl AudioEncoder {
             },
         ));
 
-        Self { conv_in, downsample_stages, mid_attention, norm_out, conv_out }
+        Self {
+            conv_in,
+            downsample_stages,
+            mid_attention,
+            norm_out,
+            conv_out,
+        }
     }
 
     /// Encode audio to latent representation.
@@ -184,7 +200,10 @@ impl AudioDecoder {
     pub fn new<'a>(vs: impl Borrow<Path<'a>>, config: &AudioVAEConfig) -> Self {
         let vs = vs.borrow();
         let first_ch = config.decoder_channels[0];
-        let last_ch = *config.decoder_channels.last().expect("decoder_channels should not be empty");
+        let last_ch = *config
+            .decoder_channels
+            .last()
+            .expect("decoder_channels should not be empty");
 
         let conv_in = Conv2DModule(tch::nn::conv2d(
             vs / "conv_in",
@@ -211,10 +230,10 @@ impl AudioDecoder {
                 vs / format!("up_{i}") / "upsample",
                 in_ch,
                 out_ch,
-                4,  // kernel_time
-                1,  // kernel_freq
-                2,  // stride_time
-                1,  // stride_freq
+                4, // kernel_time
+                1, // kernel_freq
+                2, // stride_time
+                1, // stride_freq
             ));
 
             let resblock = ResnetBlock2D::new(

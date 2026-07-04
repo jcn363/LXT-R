@@ -15,7 +15,9 @@ impl LinearQuadratic {
 
 impl Default for LinearQuadratic {
     fn default() -> Self {
-        Self { quadratic_begin: DEFAULT_TERMINAL }
+        Self {
+            quadratic_begin: DEFAULT_TERMINAL,
+        }
     }
 }
 
@@ -59,7 +61,10 @@ impl Beta {
 
 impl Default for Beta {
     fn default() -> Self {
-        Self { alpha: 0.6, beta: 0.2 }
+        Self {
+            alpha: 0.6,
+            beta: 0.2,
+        }
     }
 }
 
@@ -92,7 +97,11 @@ pub struct Ltx2Scheduler {
 
 impl Ltx2Scheduler {
     pub fn new(max_shift: f64, base_shift: f64, terminal: f64) -> Self {
-        Self { max_shift, base_shift, terminal }
+        Self {
+            max_shift,
+            base_shift,
+            terminal,
+        }
     }
 }
 
@@ -114,7 +123,9 @@ impl Scheduler for Ltx2Scheduler {
             let t = i as f64 / n;
             // Shift-based schedule: maps linear t to sigma via logit-like transform
             let shifted = t * self.max_shift + self.base_shift;
-            let sigma = self.terminal + (1.0 - self.terminal) / (1.0 + (shifted - self.base_shift - self.max_shift / 2.0).exp());
+            let sigma = self.terminal
+                + (1.0 - self.terminal)
+                    / (1.0 + (shifted - self.base_shift - self.max_shift / 2.0).exp());
             sigmas.push(sigma.clamp(0.0, 1.0));
         }
         sigmas

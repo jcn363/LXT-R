@@ -1,6 +1,6 @@
 use tch::Tensor;
 
-use crate::shapes::{VideoLatentShape, AudioLatentShape};
+use crate::shapes::{AudioLatentShape, VideoLatentShape};
 
 pub trait LatentTools {
     fn shape(&self) -> &[i64];

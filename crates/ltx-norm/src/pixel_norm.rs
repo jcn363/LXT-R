@@ -1,5 +1,5 @@
-use tch::Tensor;
 use ltx_types::NORM_EPS;
+use tch::Tensor;
 
 pub struct PixelNorm {
     eps: f64,
@@ -7,9 +7,7 @@ pub struct PixelNorm {
 
 impl std::fmt::Debug for PixelNorm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PixelNorm")
-            .field("eps", &self.eps)
-            .finish()
+        f.debug_struct("PixelNorm").field("eps", &self.eps).finish()
     }
 }
 

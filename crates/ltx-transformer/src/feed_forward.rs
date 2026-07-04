@@ -16,7 +16,8 @@ impl FeedForward {
     }
 
     pub fn forward(&self, x: &Tensor) -> Tensor {
-        self.linear_2.forward(&self.linear_1.forward(x).gelu("none"))
+        self.linear_2
+            .forward(&self.linear_1.forward(x).gelu("none"))
     }
 }
 

@@ -1,5 +1,5 @@
-use tch::Tensor;
 use ltx_types::{FP8_MAX, FP8_MIN, STABILITY_EPS};
+use tch::Tensor;
 
 /// Quantize weight to FP8 E4M3FN per tensor.
 ///
@@ -44,7 +44,10 @@ mod tests {
 
         // Max error bounded by FP8 quantization step
         let max_err = (&original - &recovered).abs().max();
-        assert!(max_err.double_value(&[]) < 1.0, "quantization error too large");
+        assert!(
+            max_err.double_value(&[]) < 1.0,
+            "quantization error too large"
+        );
     }
 
     #[test]

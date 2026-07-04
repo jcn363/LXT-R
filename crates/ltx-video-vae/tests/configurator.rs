@@ -1,5 +1,5 @@
-use ltx_video_vae::configurator::VideoVAEConfig;
 use ltx_types::NormLayerType;
+use ltx_video_vae::configurator::VideoVAEConfig;
 
 #[test]
 fn test_vae_config_deserialize_minimal() {
@@ -17,7 +17,7 @@ fn test_vae_config_deserialize_minimal() {
     assert_eq!(cfg.num_res_blocks, 2);
     assert_eq!(cfg.latent_channels, 16);
     // Default values
-    assert_eq!(cfg.causal, false);
+    assert!(!cfg.causal);
     assert_eq!(cfg.norm_type, NormLayerType::Group);
     assert_eq!(cfg.spatial_downsample_factor, 8);
 }

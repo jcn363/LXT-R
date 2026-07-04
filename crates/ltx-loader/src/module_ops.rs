@@ -53,7 +53,8 @@ impl ModuleOps {
             }
         }
 
-        let extra: Vec<String> = state_dict.keys()
+        let extra: Vec<String> = state_dict
+            .keys()
             .filter(|k| !module_params.iter().any(|p| p == *k))
             .cloned()
             .collect();
@@ -86,9 +87,18 @@ mod tests {
     fn test_match_parameters() {
         let module_params = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let mut sd = HashMap::new();
-        sd.insert("a".to_string(), Tensor::zeros([2], (tch::Kind::Float, tch::Device::Cpu)));
-        sd.insert("c".to_string(), Tensor::zeros([2], (tch::Kind::Float, tch::Device::Cpu)));
-        sd.insert("d".to_string(), Tensor::zeros([2], (tch::Kind::Float, tch::Device::Cpu)));
+        sd.insert(
+            "a".to_string(),
+            Tensor::zeros([2], (tch::Kind::Float, tch::Device::Cpu)),
+        );
+        sd.insert(
+            "c".to_string(),
+            Tensor::zeros([2], (tch::Kind::Float, tch::Device::Cpu)),
+        );
+        sd.insert(
+            "d".to_string(),
+            Tensor::zeros([2], (tch::Kind::Float, tch::Device::Cpu)),
+        );
 
         let (matched, missing, extra) = ModuleOps::match_parameters(&module_params, &sd);
         assert_eq!(matched, vec!["a", "c"]);

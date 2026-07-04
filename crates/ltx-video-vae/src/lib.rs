@@ -54,7 +54,17 @@ impl VideoEncoder {
     ) -> Self {
         let vs = vs.borrow();
 
-        let conv_in = make_conv_nd(vs / "conv_in", 3, in_channels, base_channels, 3, 1, 1, causal, "zeros");
+        let conv_in = make_conv_nd(
+            vs / "conv_in",
+            3,
+            in_channels,
+            base_channels,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
 
         let mut down_convs = Vec::new();
         let mut down_resblocks = Vec::new();
@@ -96,7 +106,9 @@ impl VideoEncoder {
             down_resblocks.push(resblock_group);
         }
 
-        let last_mult = *channel_multipliers.last().expect("channel_multipliers should not be empty");
+        let last_mult = *channel_multipliers
+            .last()
+            .expect("channel_multipliers should not be empty");
         let mid_channels = base_channels * last_mult;
 
         let mid = UNetMidBlock3D::new(
@@ -109,7 +121,17 @@ impl VideoEncoder {
         );
 
         let conv_norm_out = build_norm_layer(norm_type, mid_channels, norm_num_groups);
-        let conv_out = make_conv_nd(vs / "conv_out", 3, mid_channels, latent_channels, 3, 1, 1, causal, "zeros");
+        let conv_out = make_conv_nd(
+            vs / "conv_out",
+            3,
+            mid_channels,
+            latent_channels,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
 
         Self {
             conv_in,
@@ -182,10 +204,22 @@ impl VideoDecoder {
     ) -> Self {
         let vs = vs.borrow();
 
-        let last_mult = *channel_multipliers.last().expect("channel_multipliers should not be empty");
+        let last_mult = *channel_multipliers
+            .last()
+            .expect("channel_multipliers should not be empty");
         let mid_channels = base_channels * last_mult;
 
-        let conv_in = make_conv_nd(vs / "conv_in", 3, latent_channels, mid_channels, 3, 1, 1, causal, "zeros");
+        let conv_in = make_conv_nd(
+            vs / "conv_in",
+            3,
+            latent_channels,
+            mid_channels,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
 
         let mid = UNetMidBlock3D::new(
             vs / "mid",
@@ -235,7 +269,17 @@ impl VideoDecoder {
         }
 
         let conv_norm_out = build_norm_layer(norm_type, base_channels, norm_num_groups);
-        let conv_out = make_conv_nd(vs / "conv_out", 3, base_channels, in_channels * 4, 3, 1, 1, causal, "zeros");
+        let conv_out = make_conv_nd(
+            vs / "conv_out",
+            3,
+            base_channels,
+            in_channels * 4,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
 
         Self {
             conv_in,

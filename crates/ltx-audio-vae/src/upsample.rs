@@ -42,17 +42,21 @@ pub fn build_upsampling_path<'a>(
 
     for i in 0..num_stages {
         let in_ch = channels[i];
-        let out_ch = if i + 1 < num_stages { channels[i + 1] } else { channels[i] / 2 };
+        let out_ch = if i + 1 < num_stages {
+            channels[i + 1]
+        } else {
+            channels[i] / 2
+        };
 
         // ConvTranspose2d: only upsample along Time, preserve Freq
         let conv: Box<dyn ModuleT> = Box::new(AsymConvTranspose2d::new(
             vs / format!("upsample_{i}"),
-            in_ch,    // in_channels
-            out_ch,   // out_channels
-            4,        // kernel_time (upsamples time dim)
-            1,        // kernel_freq (no change to freq dim)
-            2,        // stride_time (doubles time dim)
-            1,        // stride_freq (preserve freq dim)
+            in_ch,  // in_channels
+            out_ch, // out_channels
+            4,      // kernel_time (upsamples time dim)
+            1,      // kernel_freq (no change to freq dim)
+            2,      // stride_time (doubles time dim)
+            1,      // stride_freq (preserve freq dim)
         ));
 
         let resblock = ResnetBlock2D::new(
@@ -96,8 +100,12 @@ mod tests {
         let vs = tch::nn::VarStore::new(tch::Device::Cpu);
         let root = vs.root();
         let channels = [256, 128, 64];
-        let stages =
-            build_upsampling_path(root / "up", &channels, NormLayerType::Group, ltx_types::VAE_NORM_NUM_GROUPS);
+        let stages = build_upsampling_path(
+            root / "up",
+            &channels,
+            NormLayerType::Group,
+            ltx_types::VAE_NORM_NUM_GROUPS,
+        );
         assert_eq!(stages.len(), 3);
 
         let x = Tensor::randn([1, 256, 16, 128], (tch::Kind::Float, tch::Device::Cpu));

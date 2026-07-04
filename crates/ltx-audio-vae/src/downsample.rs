@@ -48,18 +48,24 @@ pub fn build_downsampling_path<'a>(
         let in_ch = if i == 0 { channels[0] } else { channels[i - 1] };
         let out_ch = channels[i];
 
-        let resblock =
-            ResnetBlock2D::new(vs / format!("resblock_{i}"), in_ch, out_ch, norm_type, norm_groups, true);
+        let resblock = ResnetBlock2D::new(
+            vs / format!("resblock_{i}"),
+            in_ch,
+            out_ch,
+            norm_type,
+            norm_groups,
+            true,
+        );
 
         let conv = if i < num_stages - 1 {
             Some(CausalConv2d::new_with_axes(
                 vs / format!("downsample_{i}"),
                 out_ch,
                 out_ch,
-                4,  // kernel_time (strided)
-                1,  // kernel_freq (no downsampling)
-                2,  // stride_time (halves time dim)
-                1,  // stride_freq (preserve freq dim)
+                4, // kernel_time (strided)
+                1, // kernel_freq (no downsampling)
+                2, // stride_time (halves time dim)
+                1, // stride_freq (preserve freq dim)
                 ltx_conv::CausalityAxis::Time,
             ))
         } else {

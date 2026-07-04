@@ -11,7 +11,13 @@ pub struct VideoLatentShape {
 
 impl VideoLatentShape {
     pub fn new(batch: i64, channels: i64, frames: i64, height: i64, width: i64) -> Self {
-        Self { batch, channels, frames, height, width }
+        Self {
+            batch,
+            channels,
+            frames,
+            height,
+            width,
+        }
     }
 
     pub fn spatial_dim(&self) -> i64 {
@@ -27,7 +33,13 @@ impl VideoLatentShape {
     }
 
     pub fn to_vec(&self) -> Vec<i64> {
-        vec![self.batch, self.channels, self.frames, self.height, self.width]
+        vec![
+            self.batch,
+            self.channels,
+            self.frames,
+            self.height,
+            self.width,
+        ]
     }
 }
 
@@ -41,7 +53,12 @@ pub struct AudioLatentShape {
 
 impl AudioLatentShape {
     pub fn new(batch: i64, channels: i64, time: i64, features: i64) -> Self {
-        Self { batch, channels, time, features }
+        Self {
+            batch,
+            channels,
+            time,
+            features,
+        }
     }
 
     pub fn to_vec(&self) -> Vec<i64> {
@@ -61,7 +78,14 @@ pub struct PatchGridBounds {
 
 impl PatchGridBounds {
     pub fn new(min_t: i64, max_t: i64, min_h: i64, max_h: i64, min_w: i64, max_w: i64) -> Self {
-        Self { min_t, max_t, min_h, max_h, min_w, max_w }
+        Self {
+            min_t,
+            max_t,
+            min_h,
+            max_h,
+            min_w,
+            max_w,
+        }
     }
 }
 

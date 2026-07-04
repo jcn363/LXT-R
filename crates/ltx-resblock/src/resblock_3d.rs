@@ -37,12 +37,42 @@ impl ResnetBlock3D {
         let vs = vs.borrow();
 
         let norm1 = build_norm_layer(norm_type, in_channels, norm_groups);
-        let conv1 = make_conv_nd(vs / "conv1", 3, in_channels, out_channels, 3, 1, 1, causal, "zeros");
+        let conv1 = make_conv_nd(
+            vs / "conv1",
+            3,
+            in_channels,
+            out_channels,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
         let norm2 = build_norm_layer(norm_type, out_channels, norm_groups);
-        let conv2 = make_conv_nd(vs / "conv2", 3, out_channels, out_channels, 3, 1, 1, causal, "zeros");
+        let conv2 = make_conv_nd(
+            vs / "conv2",
+            3,
+            out_channels,
+            out_channels,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
 
         let shortcut: Box<dyn ModuleT> = if in_channels != out_channels {
-            make_conv_nd(vs / "shortcut", 3, in_channels, out_channels, 1, 1, 0, causal, "zeros")
+            make_conv_nd(
+                vs / "shortcut",
+                3,
+                in_channels,
+                out_channels,
+                1,
+                1,
+                0,
+                causal,
+                "zeros",
+            )
         } else {
             Box::new(Identity)
         };

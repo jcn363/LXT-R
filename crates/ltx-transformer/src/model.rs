@@ -1,6 +1,6 @@
+use ltx_norm::RMSNorm;
 use tch::nn::{Linear, Module};
 use tch::Tensor;
-use ltx_norm::RMSNorm;
 
 use crate::block::BasicAVTransformerBlock;
 
@@ -11,12 +11,12 @@ pub struct LTXModel {
 }
 
 impl LTXModel {
-    pub fn new(
-        blocks: Vec<BasicAVTransformerBlock>,
-        norm_out: RMSNorm,
-        proj_out: Linear,
-    ) -> Self {
-        Self { blocks, norm_out, proj_out }
+    pub fn new(blocks: Vec<BasicAVTransformerBlock>, norm_out: RMSNorm, proj_out: Linear) -> Self {
+        Self {
+            blocks,
+            norm_out,
+            proj_out,
+        }
     }
 
     pub fn forward(

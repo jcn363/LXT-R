@@ -1,4 +1,4 @@
-use ltx_conditioning::{causal_mask, padding_mask, cross_attention_mask};
+use ltx_conditioning::{causal_mask, cross_attention_mask, padding_mask};
 use tch::Device;
 
 #[test]

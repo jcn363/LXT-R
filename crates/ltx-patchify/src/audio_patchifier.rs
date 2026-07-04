@@ -65,7 +65,12 @@ pub struct AudioTiming {
 
 impl AudioTiming {
     pub fn new(start_sample: i64, end_sample: i64, start_patch: i64, end_patch: i64) -> Self {
-        Self { start_sample, end_sample, start_patch, end_patch }
+        Self {
+            start_sample,
+            end_sample,
+            start_patch,
+            end_patch,
+        }
     }
 
     /// Number of patches in this timing range.
