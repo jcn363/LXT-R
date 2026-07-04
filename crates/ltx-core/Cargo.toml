@@ -28,6 +28,7 @@ ltx-loader = { path = "../ltx-loader" }
 ltx-quantization = { path = "../ltx-quantization" }
 tch = { workspace = true }
 safetensors = { workspace = true }
+clap = { version = "4", features = ["derive"] }
 
 [lints]
 workspace = true
