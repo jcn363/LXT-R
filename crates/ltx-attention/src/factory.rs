@@ -11,15 +11,15 @@ pub fn make_attention(
     head_dim: i64,
     context_dim: Option<i64>,
     rope_type: RopeType,
-) -> Box<dyn ModuleT + Send> {
+) -> Result<Box<dyn ModuleT + Send>, String> {
     match attn_type {
-        "transformer" => {
-            Box::new(TransformerAttention::new(dim, heads, head_dim, context_dim, rope_type))
-        }
-        "simple" => Box::new(SimpleAttnBlock::new(dim)),
-        "gated" => {
-            Box::new(TransformerAttention::new_gated(dim, heads, head_dim, context_dim, rope_type))
-        }
-        _ => panic!("Unknown attention type: {}", attn_type),
+        "transformer" => Ok(Box::new(TransformerAttention::new(
+            dim, heads, head_dim, context_dim, rope_type,
+        ))),
+        "simple" => Ok(Box::new(SimpleAttnBlock::new(dim))),
+        "gated" => Ok(Box::new(TransformerAttention::new_gated(
+            dim, heads, head_dim, context_dim, rope_type,
+        ))),
+        _ => Err(format!("Unknown attention type: {}", attn_type)),
     }
 }

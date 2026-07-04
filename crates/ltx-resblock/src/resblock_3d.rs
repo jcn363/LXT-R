@@ -61,7 +61,7 @@ impl ResnetBlock3D {
         let h = self.conv1.forward_t(&h, true);
         let h = self.norm2.forward_t(&h, false).silu();
         let h = self.conv2.forward_t(&h, true);
-        x + self.shortcut.forward_t(&h, true)
+        self.shortcut.forward_t(x, true) + h
     }
 }
 

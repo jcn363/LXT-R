@@ -39,7 +39,7 @@ impl FP8Linear {
 impl Module for FP8Linear {
     fn forward(&self, x: &Tensor) -> Tensor {
         let w_f32 = dequantize_fp8(&self.weight, &self.scale, tch::Kind::Float);
-        let out = x.matmul(&w_f32.to_dtype(x.kind(), false, false));
+        let out = x.matmul(&w_f32.to_dtype(x.kind(), false, false).transpose(0, 1));
         match &self.bias {
             Some(b) => out + b,
             None => out,

@@ -45,20 +45,25 @@ impl BasicAVTransformerBlock {
     ) -> Tensor {
         let (modulation, _) = self.adaln.forward(timestep, x.kind());
         let chunks: Vec<Tensor> = modulation.chunk(6, -1);
-        let (shift_msa, scale_msa, gate_msa) = (&chunks[0], &chunks[1], &chunks[2]);
-        let (shift_mlp, scale_mlp, gate_mlp) = (&chunks[3], &chunks[4], &chunks[5]);
+        // Unsqueeze to (B, 1, dim) for broadcasting with (B, seq, dim)
+        let (shift_msa, scale_msa, gate_msa) = (
+            chunks[0].unsqueeze(1), chunks[1].unsqueeze(1), chunks[2].unsqueeze(1),
+        );
+        let (shift_mlp, scale_mlp, gate_mlp) = (
+            chunks[3].unsqueeze(1), chunks[4].unsqueeze(1), chunks[5].unsqueeze(1),
+        );
 
-        let h = self.norm1.forward(x) * (Tensor::ones_like(scale_msa) + scale_msa) + shift_msa;
+        let h = self.norm1.forward(x) * (Tensor::ones_like(&scale_msa) + &scale_msa) + &shift_msa;
         let h = self.self_attn.forward(&h, None, mask, pe);
-        let x = x + gate_msa * h;
+        let x = x + &gate_msa * h;
 
         let h = self.norm_cross.forward(&x);
         let h = self.cross_attn.forward(&h, Some(context), mask, None);
         let x = x + h;
 
-        let h = self.norm2.forward(&x) * (Tensor::ones_like(scale_mlp) + scale_mlp) + shift_mlp;
+        let h = self.norm2.forward(&x) * (Tensor::ones_like(&scale_mlp) + &scale_mlp) + &shift_mlp;
         let h = self.ff.forward(&h);
-        x + gate_mlp * h
+        x + &gate_mlp * h
     }
 }
 

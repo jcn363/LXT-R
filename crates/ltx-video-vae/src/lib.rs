@@ -96,7 +96,7 @@ impl VideoEncoder {
             down_resblocks.push(resblock_group);
         }
 
-        let last_mult = *channel_multipliers.last().unwrap();
+        let last_mult = *channel_multipliers.last().expect("channel_multipliers should not be empty");
         let mid_channels = base_channels * last_mult;
 
         let mid = UNetMidBlock3D::new(
@@ -182,7 +182,7 @@ impl VideoDecoder {
     ) -> Self {
         let vs = vs.borrow();
 
-        let last_mult = *channel_multipliers.last().unwrap();
+        let last_mult = *channel_multipliers.last().expect("channel_multipliers should not be empty");
         let mid_channels = base_channels * last_mult;
 
         let conv_in = make_conv_nd(vs / "conv_in", 3, latent_channels, mid_channels, 3, 1, 1, causal, "zeros");

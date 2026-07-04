@@ -53,7 +53,7 @@ impl GemmaTextEncoder {
         let ids = self.tokenizer.encode(&enhanced).unwrap_or_default();
         let seq_len = ids.len() as i64;
         let input_ids = Tensor::f_from_slice::<i64>(&ids)
-            .unwrap()
+            .expect("Failed to create tensor from token IDs")
             .unsqueeze(0);
         let hidden = self.text_model.forward(&input_ids);
         hidden.narrow(1, seq_len - 1, 1).squeeze_dim(1)

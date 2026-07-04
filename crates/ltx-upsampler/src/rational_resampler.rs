@@ -66,12 +66,12 @@ impl SpatialRationalResampler {
     }
 
     pub fn forward(&self, x: &Tensor) -> Tensor {
-        let (_b, _c, _t, h, w) = x.size5().unwrap();
+        let (_b, _c, _t, h, w) = x.size5().expect("forward: input tensor must be 5D");
 
         let upsampled = if self.num > self.den {
             // Upsample by num, then downsample by den
             let up = Self::nearest_upsample(x, self.num);
-            let (_, _, _, h_up, w_up) = up.size5().unwrap();
+            let (_, _, _, h_up, w_up) = up.size5().expect("nearest_upsample: output must be 5D");
             Self::downsample_by_factor(&up, self.den, h_up, w_up)
         } else {
             // Downsample by den, then upsample by num
@@ -84,7 +84,7 @@ impl SpatialRationalResampler {
         let refined = self.refine_conv.forward_t(&refined, false);
 
         // Ensure output matches expected spatial size
-        let (_, _, _, h_out, w_out) = refined.size5().unwrap();
+        let (_, _, _, h_out, w_out) = refined.size5().expect("refine_conv: output must be 5D");
         let h_expected = h * self.num / self.den;
         let w_expected = w * self.num / self.den;
 
@@ -97,7 +97,7 @@ impl SpatialRationalResampler {
 
     /// Nearest-neighbor upsample by factor `r` on spatial dims only.
     fn nearest_upsample(x: &Tensor, r: i64) -> Tensor {
-        let (b, c, t, h, w) = x.size5().unwrap();
+        let (b, c, t, h, w) = x.size5().expect("nearest_upsample: input must be 5D");
         x.reshape([b, c, t, h, 1, w, 1])
             .expand([b, c, t, h, r, w, r], true)
             .reshape([b, c, t, h * r, w * r])
@@ -105,13 +105,13 @@ impl SpatialRationalResampler {
 
     /// Downsample by factor `r` using average pooling on spatial dims.
     fn downsample_by_factor(x: &Tensor, r: i64, h: i64, w: i64) -> Tensor {
-        let (b, c, t, _, _) = x.size5().unwrap();
+        let (b, c, t, _, _) = x.size5().expect("downsample_by_factor: input must be 5D");
         let h_out = h / r;
         let w_out = w / r;
         // Reshape to 4D for adaptive_avg_pool2d, process per-frame
         let x_4d = x.reshape([b * t, c, h, w]);
         let pooled = x_4d.adaptive_avg_pool2d([h_out, w_out]);
-        let (_, _, h_out, w_out) = pooled.size4().unwrap();
+        let (_, _, h_out, w_out) = pooled.size4().expect("adaptive_avg_pool2d: output must be 4D");
         pooled
             .reshape([b, t, c, h_out, w_out])
             .permute([0, 2, 1, 3, 4])

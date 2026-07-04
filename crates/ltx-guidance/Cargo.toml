@@ -7,5 +7,8 @@ edition = "2021"
 ltx-types = { path = "../ltx-types" }
 serde = { workspace = true }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [lints]
 workspace = true

@@ -10,5 +10,8 @@ ltx-loader = { path = "../ltx-loader" }
 tch = { workspace = true }
 serde = { workspace = true }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [lints]
 workspace = true

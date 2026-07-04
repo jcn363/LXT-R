@@ -79,7 +79,16 @@ impl DualConv3d {
     /// padding (first frame repeated).  The spatial convolution always uses
     /// symmetric padding.
     pub fn forward(&self, x: &Tensor, causal: bool) -> Tensor {
-        let h = self.conv_spatial.forward(x);
+        // Zero-pad spatial dims (H, W) by (kernel-1)/2 on each side so the
+        // spatial conv [1, k, k] preserves spatial resolution.
+        let spatial_pad = (self.time_kernel_size - 1) / 2; // e.g. 1 for kernel=3
+        // [W_left, W_right, H_left, H_right, T_left, T_right]
+        let x = x.pad(
+            [spatial_pad, spatial_pad, spatial_pad, spatial_pad, 0, 0],
+            "constant",
+            0.0,
+        );
+        let h = self.conv_spatial.forward(&x);
         let b = h.size()[0];
         let c = h.size()[1];
         let d4 = h.size()[3];

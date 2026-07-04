@@ -50,25 +50,26 @@ pub fn precompute_freqs_cis(
 }
 
 fn apply_interleaved(x: &Tensor, cos: &Tensor, sin: &Tensor) -> Tensor {
-    let last_dim = x.size().last().copied().unwrap();
-    let d = last_dim / 2;
-    let shape = {
-        let mut s = x.size();
-        s.push(d);
-        s.push(2);
-        s
-    };
-    let t_dup = x.reshape(&shape);
-    let t1 = t_dup.narrow(-1, 0, 1);
-    let t2 = t_dup.narrow(-1, 1, 1);
-    let t_rot = Tensor::stack(&[&(-t2), &t1], -1).reshape(x.size());
-    x * cos + t_rot * sin
+    let dims = x.size();
+    let last_dim = dims.last().expect("apply_interleaved: tensor must have at least one dimension");
+    let half = last_dim / 2;
+    // Reshape [..., dim] → [..., half, 2] to expose consecutive pairs
+    let mut shape: Vec<i64> = x.size();
+    *shape.last_mut().expect("apply_interleaved: tensor must have at least one dimension") = half;
+    shape.push(2);
+    let x_pairs = x.reshape(&shape);          // [..., half, 2]
+    let x_even = x_pairs.narrow(-1, 0, 1);    // [..., half, 1]
+    let x_odd = x_pairs.narrow(-1, 1, 1);     // [..., half, 1]
+    // Pair-wise rotation: [even, odd] → [-odd, even] (90° rotation)
+    let x_rot = Tensor::cat(&[&(-x_odd), &x_even], -1).reshape(x.size());
+    x * cos + x_rot * sin
 }
 
 fn apply_split(x: &Tensor, cos: &Tensor, sin: &Tensor) -> Tensor {
-    let d = x.size().last().copied().unwrap() / 2;
-    let x1 = x.narrow(-1, 0, d);
-    let x2 = x.narrow(-1, d, d);
-    let rotated = Tensor::cat(&[&(-x2), &x1], -1);
-    x * cos + rotated * sin
+    let d = x.size().last().expect("apply_split: tensor must have at least one dimension") / 2;
+    let x1 = x.narrow(-1, 0, d);    // first half
+    let x2 = x.narrow(-1, d, d);    // second half
+    let out1 = x1.shallow_clone() * cos - x2.shallow_clone() * sin;
+    let out2 = x2 * cos + x1 * sin;
+    Tensor::cat(&[&out1, &out2], -1)
 }

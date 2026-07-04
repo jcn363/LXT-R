@@ -61,7 +61,7 @@ pub fn make_conv_nd<'a>(
                 ..Default::default()
             },
         )),
-        _ => panic!("make_conv_nd: unsupported dims={dims}"),
+        _ => panic!("make_conv_nd: unsupported dims={dims} (only 2 or 3 supported)"),
     }
 }
 

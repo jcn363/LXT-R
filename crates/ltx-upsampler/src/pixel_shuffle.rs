@@ -51,7 +51,7 @@ impl PixelShuffleND {
     /// 2D pixel shuffle: `(B, C*r^2, H, W)` → `(B, C, H*r, W*r)`.
     fn forward_2d(&self, x: &Tensor) -> Tensor {
         let r = self.upscale_factor;
-        let (b, c_mul_r2, h, w) = x.size4().unwrap();
+        let (b, c_mul_r2, h, w) = x.size4().expect("forward_2d: tensor must be 4D");
         let c = c_mul_r2 / (r * r);
         assert_eq!(
             c_mul_r2,
@@ -71,7 +71,7 @@ impl PixelShuffleND {
     /// Only upsamples the spatial (H, W) dims; the time axis is preserved.
     fn forward_3d(&self, x: &Tensor) -> Tensor {
         let r = self.upscale_factor;
-        let (b, c_mul_r2, t, h, w) = x.size5().unwrap();
+        let (b, c_mul_r2, t, h, w) = x.size5().expect("forward_3d: tensor must be 5D");
         let c = c_mul_r2 / (r * r);
         assert_eq!(
             c_mul_r2,

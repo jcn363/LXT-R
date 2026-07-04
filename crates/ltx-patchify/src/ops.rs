@@ -6,7 +6,7 @@ use tch::Tensor;
 /// sequence dimension `T = (F/p1)*(H/p2)*(W/p3)` and the channel-plus-patch
 /// elements form the feature dimension `D = C*p1*p2*p3`.
 pub fn patchify_5d(x: &Tensor, p1: i64, p2: i64, p3: i64) -> Tensor {
-    let (b, c, f, h, w) = x.size5().unwrap();
+    let (b, c, f, h, w) = x.size5().expect("patchify_5d: tensor must be 5D");
     x.reshape([b, c, f / p1, p1, h / p2, p2, w / p3, p3])
         .permute([0, 2, 4, 6, 1, 3, 5, 7])
         .reshape([b, (f / p1) * (h / p2) * (w / p3), c * p1 * p2 * p3])
@@ -40,7 +40,7 @@ pub fn unpatchify_5d(
 /// Each `p×p` spatial block is folded into the channel dimension, producing a
 /// compact representation with reduced spatial extent.
 pub fn patchify_4d(x: &Tensor, p: i64) -> Tensor {
-    let (b, c, h, w) = x.size4().unwrap();
+    let (b, c, h, w) = x.size4().expect("patchify_4d: tensor must be 4D");
     x.reshape([b, c, h / p, p, w / p, p])
         .permute([0, 1, 3, 5, 2, 4])
         .reshape([b, c * p * p, h / p, w / p])
@@ -48,7 +48,7 @@ pub fn patchify_4d(x: &Tensor, p: i64) -> Tensor {
 
 /// Unpatchify 4D tensor back to `(B, C, H, W)`.
 pub fn unpatchify_4d(x: &Tensor, b: i64, c: i64, h: i64, w: i64, p: i64) -> Tensor {
-    let (_b_actual, _, hp, wp) = x.size4().unwrap();
+    let (_b_actual, _, hp, wp) = x.size4().expect("unpatchify_4d: tensor must be 4D");
     x.reshape([b, c, p, p, hp, wp])
         .permute([0, 1, 4, 2, 5, 3])
         .reshape([b, c, h, w])
@@ -59,7 +59,7 @@ pub fn unpatchify_4d(x: &Tensor, b: i64, c: i64, h: i64, w: i64, p: i64) -> Tens
 /// Each time step's channel × frequency features are concatenated into a single
 /// vector per position.
 pub fn patchify_audio(x: &Tensor) -> Tensor {
-    let (b, c, t, f) = x.size4().unwrap();
+    let (b, c, t, f) = x.size4().expect("patchify_audio: tensor must be 4D");
     x.reshape([b, c, t, f])
         .permute([0, 2, 1, 3])
         .reshape([b, t, c * f])
@@ -67,7 +67,7 @@ pub fn patchify_audio(x: &Tensor) -> Tensor {
 
 /// Unpatchify audio tensor back to `(B, C, T, F)`.
 pub fn unpatchify_audio(x: &Tensor, c: i64, f: i64) -> Tensor {
-    let (b, t, _) = x.size3().unwrap();
+    let (b, t, _) = x.size3().expect("unpatchify_audio: tensor must be 3D");
     x.reshape([b, t, c, f]).permute([0, 2, 1, 3])
 }
 

@@ -76,7 +76,7 @@ impl AudioEncoder {
     pub fn new<'a>(vs: impl Borrow<Path<'a>>, config: &AudioVAEConfig) -> Self {
         let vs = vs.borrow();
         let first_ch = config.encoder_channels[0];
-        let last_ch = *config.encoder_channels.last().unwrap();
+        let last_ch = *config.encoder_channels.last().expect("encoder_channels should not be empty");
 
         let conv_in = Conv2DModule(tch::nn::conv2d(
             vs / "conv_in",
@@ -184,7 +184,7 @@ impl AudioDecoder {
     pub fn new<'a>(vs: impl Borrow<Path<'a>>, config: &AudioVAEConfig) -> Self {
         let vs = vs.borrow();
         let first_ch = config.decoder_channels[0];
-        let last_ch = *config.decoder_channels.last().unwrap();
+        let last_ch = *config.decoder_channels.last().expect("decoder_channels should not be empty");
 
         let conv_in = Conv2DModule(tch::nn::conv2d(
             vs / "conv_in",

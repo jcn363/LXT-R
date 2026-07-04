@@ -50,27 +50,45 @@ impl CausalConv3d {
     /// - `causal = true`: pads the time axis on the left by repeating the
     ///   first frame, preserving temporal causality.
     /// - `causal = false`: symmetrically pads with the first and last frames.
+    ///
+    /// Spatial dimensions (H, W) are zero-padded by `(kernel-1)/2` on each
+    /// side to preserve spatial resolution.
     pub fn forward(&self, x: &Tensor, causal: bool) -> Tensor {
         let b = x.size()[0];
         let c = x.size()[1];
-        let d4 = x.size()[3];
-        let d5 = x.size()[4];
+        let h = x.size()[3];
+        let w = x.size()[4];
+        let spatial_pad = (self.time_kernel_size - 1) / 2; // e.g. 1 for kernel=3
         if causal {
             let first_frame = x.narrow(2, 0, 1);
             let pad = first_frame.expand(
-                [b, c, self.time_kernel_size - 1, d4, d5],
+                [b, c, self.time_kernel_size - 1, h, w],
                 true,
             );
-            self.conv.forward(&Tensor::cat(&[&pad, x], 2))
+            let x_padded = Tensor::cat(&[&pad, x], 2);
+            // Zero-pad spatial dims: [W_left, W_right, H_left, H_right, T_left, T_right]
+            let x_padded = x_padded.pad(
+                [spatial_pad, spatial_pad, spatial_pad, spatial_pad, 0, 0],
+                "constant",
+                0.0,
+            );
+            self.conv.forward(&x_padded)
         } else {
             let half = (self.time_kernel_size - 1) / 2;
             let first = x
                 .narrow(2, 0, 1)
-                .expand([b, c, half, d4, d5], true);
+                .expand([b, c, half, h, w], true);
             let last = x
                 .narrow(2, x.size()[2] - 1, 1)
-                .expand([b, c, half, d4, d5], true);
-            self.conv.forward(&Tensor::cat(&[&first, x, &last], 2))
+                .expand([b, c, half, h, w], true);
+            let x_padded = Tensor::cat(&[&first, x, &last], 2);
+            // Zero-pad spatial dims: [W_left, W_right, H_left, H_right, T_left, T_right]
+            let x_padded = x_padded.pad(
+                [spatial_pad, spatial_pad, spatial_pad, spatial_pad, 0, 0],
+                "constant",
+                0.0,
+            );
+            self.conv.forward(&x_padded)
         }
     }
 }

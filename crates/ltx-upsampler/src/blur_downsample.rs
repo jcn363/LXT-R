@@ -88,7 +88,7 @@ impl BlurDownsample {
     }
 
     fn forward_4d(&self, x: &Tensor) -> Tensor {
-        let (_b, c, _h, _w) = x.size4().unwrap();
+        let (_b, c, _h, _w) = x.size4().expect("forward_4d: tensor must be 4D");
         let k = self.blur_kernel.size()[0];
 
         // Blur: depthwise conv with fixed Gaussian kernel (no learnable params)
@@ -102,11 +102,11 @@ impl BlurDownsample {
     }
 
     fn forward_5d(&self, x: &Tensor) -> Tensor {
-        let (b, c, t, h, w) = x.size5().unwrap();
+        let (b, c, t, h, w) = x.size5().expect("forward_5d: tensor must be 5D");
         // Reshape to (B*T, C, H, W) for per-frame blur + conv
         let x_4d = x.reshape([b * t, c, h, w]);
         let out = self.forward_4d(&x_4d);
-        let (_, c_out, h_out, w_out) = out.size4().unwrap();
+        let (_, c_out, h_out, w_out) = out.size4().expect("forward_5d: output must be 4D");
         out.reshape([b, t, c_out, h_out, w_out])
             .permute([0, 2, 1, 3, 4])
     }
@@ -120,11 +120,8 @@ impl BlurDownsample {
             Tensor::arange_start(-half, half + 1, (tch::Kind::Float, tch::Device::Cpu));
         let gaussian_1d = (&coords * &coords * (-0.5 / (sigma * sigma))).exp();
         let gaussian_1d = &gaussian_1d / gaussian_1d.sum(tch::Kind::Float);
-        // Outer product for 2D kernel
-        gaussian_1d
-            .unsqueeze(0)
-            .matmul(&gaussian_1d.unsqueeze(1))
-            .squeeze()
+        // Outer product for 2D kernel: [3,1] * [1,3] = [3,3]
+        gaussian_1d.unsqueeze(1) * gaussian_1d.unsqueeze(0)
     }
 
     /// Create a 4D Gaussian kernel for depthwise conv: (C, 1, K, K).

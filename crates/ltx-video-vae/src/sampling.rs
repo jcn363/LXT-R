@@ -4,7 +4,7 @@ use tch::Tensor;
 ///
 /// Packs each r×r spatial block into the channel dimension.
 pub fn space_to_depth(x: &Tensor, r: i64) -> Tensor {
-    let (b, c, t, h, w) = x.size5().unwrap();
+    let (b, c, t, h, w) = x.size5().expect("space_to_depth: tensor must be 5D");
     x.reshape([b, c, t, h / r, r, w / r, r])
         .permute([0, 1, 4, 6, 2, 3, 5])
         .reshape([b, c * r * r, t, h / r, w / r])
@@ -13,7 +13,7 @@ pub fn space_to_depth(x: &Tensor, r: i64) -> Tensor {
 /// Inverse of `space_to_depth`.
 /// `(B, C·r², T, H/r, W/r)` → `(B, C, T, H, W)`
 pub fn depth_to_space(x: &Tensor, r: i64) -> Tensor {
-    let (b, crr, t, hdiv, wdiv) = x.size5().unwrap();
+    let (b, crr, t, hdiv, wdiv) = x.size5().expect("depth_to_space: tensor must be 5D");
     let c = crr / (r * r);
     x.reshape([b, c, r, r, t, hdiv, wdiv])
         .permute([0, 1, 4, 5, 2, 6, 3])

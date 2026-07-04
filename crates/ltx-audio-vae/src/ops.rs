@@ -87,7 +87,7 @@ impl AudioProcessor {
     /// Returns `(B, C, num_chunks, chunk_size)`.  If `T` is not evenly
     /// divisible by `chunk_size`, the last chunk is zero-padded.
     pub fn chunk(&self, x: &Tensor) -> Tensor {
-        let (b, c, t) = x.size3().unwrap();
+        let (b, c, t) = x.size3().expect("chunk: tensor must be 3D");
         let num_chunks = (t + self.chunk_size - 1) / self.chunk_size;
 
         let padded = if t % self.chunk_size != 0 {
@@ -108,7 +108,7 @@ impl AudioProcessor {
     ///
     /// Inverse of `chunk`: `(B, C, N, S)` → `(B, C, T)`.
     pub fn unchunk(&self, x: &Tensor) -> Tensor {
-        let (b, c, _n, _s) = x.size4().unwrap();
+        let (b, c, _n, _s) = x.size4().expect("unchunk: tensor must be 4D");
         x.reshape([b, c, -1])
     }
 

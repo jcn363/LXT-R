@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  # CPU-only libtorch - CUDA not available on standard runners
+  LIBTORCH_URL: "https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.6.0%2Bcpu.zip"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+
+      - name: Cache libtorch
+        id: cache-libtorch
+        uses: actions/cache@v4
+        with:
+          path: /tmp/libtorch
+          key: libtorch-2.6.0-cpu
+
+      - name: Install libtorch
+        if: steps.cache-libtorch.outputs.cache-hit != 'true'
+        run: |
+          curl -L "$LIBTORCH_URL" -o /tmp/libtorch.zip
+          unzip -q /tmp/libtorch.zip -d /tmp
+          rm /tmp/libtorch.zip
+
+      - name: Set libtorch env
+        run: |
+          echo "LIBTORCH=/tmp/libtorch" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/tmp/libtorch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+
+      - name: Build
+        run: cargo build --workspace
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: SSOT - no hardcoded constants
+        run: |
+          rg "1e-6|1e-8|448\.0|10000\.0" \
+            --include="*.rs" \
+            --glob="!**/constants.rs" \
+            --glob="!**/tests/**" \
+            -q && exit 1 || exit 0
+
+      - name: SSOT - no duplicate function defs
+        run: |
+          DUPS=$(rg "pub fn to_velocity|pub fn to_denoised|pub fn patchify|pub fn unpatchify" \
+            --include="*.rs" -c | grep -v ":1$" || true)
+          if [ -n "$DUPS" ]; then echo "$DUPS"; exit 1; fi
+
+      - name: "SSOT - no crate:: imports for shared primitives"
+        run: |
+          rg "use crate::(norm|attention|conv|resblock|patchify|fp8)::" \
+            --include="*.rs" \
+            --glob="!**/lib.rs" \
+            -q && exit 1 || exit 0
+
+      - name: Test
+        run: cargo test --workspace
