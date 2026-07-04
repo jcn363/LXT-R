@@ -8,5 +8,8 @@ pub mod feed_forward;
 pub mod model;
 pub mod text_projection;
 
+pub use block::BasicAVTransformerBlock;
 pub use configurator::from_config;
+pub use feed_forward::FeedForward;
 pub use model::LTXModel;
+pub use text_projection::PixArtAlphaTextProjection;

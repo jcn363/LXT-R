@@ -5,11 +5,19 @@ use tch::Tensor;
 ///
 /// THE ONLY cuBLAS FP8 GEMM wrapper in the LTX codebase.
 /// CUDA FFI is isolated here — no other crate calls cuBLAS directly.
+///
+/// The handle is stored for lifetime management. It is never dereferenced
+/// because the CUDA FFI is not yet wired — `new()` returns `None` on all
+/// platforms until `kernels.cu` is linked.
 pub struct CublasFp8Handle {
-    #[allow(dead_code)]
+    /// Stored for ownership/lifetime only — never dereferenced.
+    /// CUDA FFI not yet linked; this keeps the raw pointer from being dropped.
+    #[expect(dead_code, reason = "ownership-lifetime guard for CUDA handle")]
     handle: *mut c_void,
 }
 
+// SAFETY: The handle is only used for ownership/lifetime, not for
+// concurrent access. The raw pointer is never dereferenced.
 unsafe impl Send for CublasFp8Handle {}
 unsafe impl Sync for CublasFp8Handle {}
 
@@ -17,6 +25,7 @@ impl CublasFp8Handle {
     /// Create a new cuBLAS handle.
     ///
     /// Returns `None` if CUDA is not available.
+    /// Currently always returns `None` — CUDA FFI not yet linked.
     pub fn new() -> Option<Self> {
         // CUDA FFI not yet wired — returns None on all platforms.
         // To enable: link against libcublas and call cublasCreate via extern "C".
@@ -29,6 +38,10 @@ impl CublasFp8Handle {
     /// `out` specifies the output dtype.
     ///
     /// THE ONLY FP8 GEMM implementation in the LTX codebase.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called — CUDA FFI not yet linked.
     pub fn gemm_fp8(
         &self,
         _a: &Tensor,
@@ -37,7 +50,7 @@ impl CublasFp8Handle {
         _scale_b: f32,
         _out: tch::Kind,
     ) -> Tensor {
-        unimplemented!("cuBLAS FP8 GEMM — requires CUDA toolchain")
+        panic!("cuBLAS FP8 GEMM requires CUDA toolchain — not yet linked")
     }
 }
 

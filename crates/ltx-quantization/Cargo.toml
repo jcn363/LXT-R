@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 ltx-types = { path = "../ltx-types" }
 ltx-fp8 = { path = "../ltx-fp8" }
-ltx-loader = { path = "../ltx-loader" }
 tch = { workspace = true }
 serde = { workspace = true }
 

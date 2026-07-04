@@ -21,3 +21,4 @@ pub use modality::*;
 pub use protocols::*;
 pub use shapes::*;
 pub use tools::*;
+pub use utils::*;

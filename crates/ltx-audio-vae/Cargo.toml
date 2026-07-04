@@ -9,7 +9,6 @@ ltx-norm = { path = "../ltx-norm" }
 ltx-conv = { path = "../ltx-conv" }
 ltx-resblock = { path = "../ltx-resblock" }
 ltx-attention = { path = "../ltx-attention" }
-ltx-patchify = { path = "../ltx-patchify" }
 tch = { workspace = true }
 serde = { workspace = true }
 

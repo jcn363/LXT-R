@@ -69,7 +69,7 @@ Before merging any code, verify:
 | **ResNet blocks** (norm → act → conv → residual) | video VAE, audio VAE, upsampler | `ltx-resblock` |
 | **Timestep embedding** (sinusoidal → MLP) | transformer AdaLN, VAE conditioning | `ltx-timestep` |
 | **Patchify/Unpatchify** (space-to-depth) | video VAE, audio VAE, transformer | `ltx-patchify` |
-| **Config parsing** (serde JSON → typed struct) | all configurators | `ltx-config` (procedural macro) |
+| **Config parsing** (serde JSON → typed struct) | all configurators | `serde` in each crate |
 | **Weight loading** (safetensors → HashMap) | loader, LoRA fusion | `ltx-loader` (shared) |
 | **FP8 quantize/dequantize** | LoRA fusion, quantization module | `ltx-fp8` (shared) |
 | **Scheduler protocol** (sigma schedule) | LTX2, LinearQuadratic, Beta | `ltx-scheduler` |
@@ -1267,8 +1267,8 @@ All depend on: ───────┘
 
 Each shared primitive gets tested once, then reused. Tests live in each crate's `tests/` directory — see `crates/*/tests/` for current coverage.
 
-- **Current**: Structural correctness (compilation, type checking) via `cargo test --workspace`
-- **Planned**: Golden `.npz` comparison tests verified against Python reference output (infrastructure TBD)
+- **Current**: Structural correctness (compilation, type checking) via `cargo test --workspace` (384 tests)
+- **Implemented**: Golden `.safetensors` comparison tests verified against reference output via `ltx_test_utils::load_golden`
 
 ---
 

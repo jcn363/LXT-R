@@ -8,7 +8,6 @@ ltx-types = { path = "../ltx-types" }
 ltx-norm = { path = "../ltx-norm" }
 ltx-attention = { path = "../ltx-attention" }
 ltx-timestep = { path = "../ltx-timestep" }
-ltx-patchify = { path = "../ltx-patchify" }
 tch = { workspace = true }
 
 [lints]

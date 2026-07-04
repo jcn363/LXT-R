@@ -34,8 +34,8 @@ pub use rational_resampler::SpatialRationalResampler;
 /// shared primitives (`ltx_conv`, `ltx_norm`, `ltx_resblock`) —
 /// no reimplementation.
 pub struct LatentUpsampler {
-    // VarStore must be kept alive to own the parameters; never read directly.
-    #[allow(dead_code)]
+    /// Stored for ownership/lifetime — keeps parameter tensors alive.
+    #[expect(dead_code, reason = "ownership-lifetime guard for parameter tensors")]
     vs: tch::nn::VarStore,
     conv_in: Box<dyn ModuleT>,
     pre_shuffle_blocks: Vec<Box<dyn ModuleT>>,
