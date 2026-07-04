@@ -160,7 +160,8 @@ crates/
 - Video frames generated (16x16 RGB)
 
 ### In Progress 🔧
-- **VAE decoder integration** — Channel mismatch identified: transformer operates on 4-ch latents, VAE decoder expects 128-ch latents. Two options: (a) add VAE encoder before transformer, or (b) work in 4-ch space only.
+- **VAE decoder integration** — Channel mismatch identified. VAE decoder weights available but not yet wired into inference (memory constraints on CI runners).
+- **Text encoder integration** — 219 Gemma3 weights downloaded. Tokenizer format (T5-based) incompatible with `tokenizers` crate. Text encoder needs tokenizer fix before wiring.
 
 ### Not Yet Implemented 📋
 1. **Text encoder integration** — Gemma3 + SigLIP for prompt conditioning (crate exists but not wired into inference)
