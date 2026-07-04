@@ -1,5 +1,7 @@
-use ltx_types::NORM_EPS;
-use tch::nn::{Conv2D, ModuleT};
+use std::borrow::Borrow;
+
+use ltx_types::{ATTENTION_NUM_GROUPS, NORM_EPS};
+use tch::nn::{Conv2D, ModuleT, Path};
 use tch::Tensor;
 
 pub struct SimpleAttnBlock {
@@ -17,9 +19,8 @@ impl std::fmt::Debug for SimpleAttnBlock {
 }
 
 impl SimpleAttnBlock {
-    pub fn new(channels: i64) -> Self {
-        let vs = tch::nn::VarStore::new(tch::Device::Cpu);
-        let root = vs.root();
+    pub fn new<'a>(vs: impl Borrow<Path<'a>>, channels: i64) -> Self {
+        let vs = vs.borrow();
         let conv_cfg = tch::nn::ConvConfig {
             padding: 0,
             stride: 1,
@@ -31,11 +32,11 @@ impl SimpleAttnBlock {
             ..Default::default()
         };
         Self {
-            norm: tch::nn::group_norm(&root / "norm", 32, channels, gn_cfg),
-            q: tch::nn::conv2d(&root / "q", channels, channels, 1, conv_cfg),
-            k: tch::nn::conv2d(&root / "k", channels, channels, 1, conv_cfg),
-            v: tch::nn::conv2d(&root / "v", channels, channels, 1, conv_cfg),
-            proj_out: tch::nn::conv2d(&root / "proj_out", channels, channels, 1, conv_cfg),
+            norm: tch::nn::group_norm(vs / "norm", ATTENTION_NUM_GROUPS, channels, gn_cfg),
+            q: tch::nn::conv2d(vs / "q", channels, channels, 1, conv_cfg),
+            k: tch::nn::conv2d(vs / "k", channels, channels, 1, conv_cfg),
+            v: tch::nn::conv2d(vs / "v", channels, channels, 1, conv_cfg),
+            proj_out: tch::nn::conv2d(vs / "proj_out", channels, channels, 1, conv_cfg),
         }
     }
 

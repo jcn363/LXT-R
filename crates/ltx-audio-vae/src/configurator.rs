@@ -7,7 +7,7 @@ use ltx_attention::SimpleAttnBlock;
 use ltx_conv::{CausalConv2d, CausalityAxis};
 use ltx_norm::GroupNorm;
 use ltx_resblock::ResnetBlock2D;
-use ltx_types::{NormLayerType, VAE_NORM_NUM_GROUPS};
+use ltx_types::VAE_NORM_NUM_GROUPS;
 
 use crate::downsample::DownsampleStage;
 use crate::upsample::UpsampleStage;
@@ -106,9 +106,6 @@ impl AudioEncoder {
                 vs / format!("down_{i}") / "resblock",
                 in_ch,
                 out_ch,
-                NormLayerType::Group,
-                config.norm_groups,
-                true,
             );
 
             let conv = if i < num_stages - 1 {
@@ -130,8 +127,8 @@ impl AudioEncoder {
         }
 
         let mut mid_attention = Vec::with_capacity(config.num_mid_attention as usize);
-        for _ in 0..config.num_mid_attention {
-            mid_attention.push(SimpleAttnBlock::new(last_ch));
+        for i in 0..config.num_mid_attention {
+            mid_attention.push(SimpleAttnBlock::new(vs / "mid_attention" / i, last_ch));
         }
 
         let norm_out = GroupNorm::with_defaults(config.norm_groups, last_ch);
@@ -240,17 +237,14 @@ impl AudioDecoder {
                 vs / format!("up_{i}") / "resblock",
                 out_ch,
                 out_ch,
-                NormLayerType::Group,
-                config.norm_groups,
-                true,
             );
 
             upsample_stages.push(UpsampleStage { conv, resblock });
         }
 
         let mut mid_attention = Vec::with_capacity(config.num_mid_attention as usize);
-        for _ in 0..config.num_mid_attention {
-            mid_attention.push(SimpleAttnBlock::new(last_ch));
+        for i in 0..config.num_mid_attention {
+            mid_attention.push(SimpleAttnBlock::new(vs / "mid_attention" / i, last_ch));
         }
 
         let norm_out = GroupNorm::with_defaults(config.norm_groups, last_ch);

@@ -38,9 +38,6 @@ pub fn make_resblock(
             vs,
             in_channels,
             out_channels,
-            norm_type,
-            norm_groups,
-            causal,
         )),
         _ => panic!("make_resblock: unsupported dims={dims} (only 2 or 3 supported)"),
     }

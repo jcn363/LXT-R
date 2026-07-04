@@ -24,7 +24,7 @@ pub fn make_attention<'a>(
             context_dim,
             rope_type,
         ))),
-        "simple" => Ok(Box::new(SimpleAttnBlock::new(dim))),
+        "simple" => Ok(Box::new(SimpleAttnBlock::new(vs, dim))),
         "gated" => Ok(Box::new(TransformerAttention::new_gated(
             vs,
             dim,

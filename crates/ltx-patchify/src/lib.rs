@@ -11,7 +11,9 @@ pub mod video_patchifier;
 
 // Re-export for single import path
 pub use audio_patchifier::{AudioPatchifier, AudioTiming};
-pub use coords::{get_patch_grid_bounds, get_pixel_coords};
+pub use coords::{
+    get_patch_grid_bounds, get_pixel_coords, num_patches, patch_bounds_to_pixel_bounds,
+};
 pub use ops::{
     patchify_4d, patchify_5d, patchify_audio, unpatchify_4d, unpatchify_5d, unpatchify_audio,
 };

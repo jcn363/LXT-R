@@ -1,12 +1,6 @@
 use tch::Tensor;
 
-use crate::shapes::{AudioLatentShape, VideoLatentShape};
-
-pub trait LatentTools {
-    fn shape(&self) -> &[i64];
-    fn ndim(&self) -> usize;
-    fn latent_shape(&self) -> VideoLatentShape;
-}
+use crate::shapes::AudioLatentShape;
 
 pub struct VideoLatentTools<'a> {
     tensor: &'a Tensor,
@@ -31,8 +25,6 @@ impl<'a> VideoLatentTools<'a> {
     }
 
     pub fn per_channel_statistics(&self) -> (Tensor, Tensor) {
-        let sizes = self.tensor.size();
-        let _c = sizes[1];
         let dims: &[i64] = &[0, 2, 3, 4];
         let means = self.tensor.mean_dim(dims, true, tch::Kind::Float);
         let stds = self.tensor.std_dim(dims, true, true);

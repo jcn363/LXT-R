@@ -4,7 +4,6 @@ use tch::Tensor;
 
 use ltx_conv::CausalConv2d;
 use ltx_resblock::ResnetBlock2D;
-use ltx_types::NormLayerType;
 
 /// A single downsampling stage: ResnetBlock2D → optional CausalConv2d stride-2.
 pub struct DownsampleStage {
@@ -37,8 +36,6 @@ impl DownsampleStage {
 pub fn build_downsampling_path<'a>(
     vs: impl Borrow<Path<'a>>,
     channels: &[i64],
-    norm_type: NormLayerType,
-    norm_groups: i64,
 ) -> Vec<DownsampleStage> {
     let vs = vs.borrow();
     let num_stages = channels.len();
@@ -52,9 +49,6 @@ pub fn build_downsampling_path<'a>(
             vs / format!("resblock_{i}"),
             in_ch,
             out_ch,
-            norm_type,
-            norm_groups,
-            true,
         );
 
         let conv = if i < num_stages - 1 {
@@ -107,8 +101,6 @@ mod tests {
         let stages = build_downsampling_path(
             root / "down",
             &channels,
-            NormLayerType::Group,
-            ltx_types::VAE_NORM_NUM_GROUPS,
         );
         assert_eq!(stages.len(), 3);
 

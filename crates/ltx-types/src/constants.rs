@@ -57,3 +57,9 @@ pub const ATTENTION_GATE_SCALE: f64 = 2.0;
 
 /// Projection coefficient epsilon (avoid division by zero).
 pub const PROJECTION_EPS: f64 = 1e-8;
+
+/// Default sinusoidal dimension for timestep embeddings in the transformer.
+pub const DEFAULT_SINUSOIDAL_DIM: i64 = 256;
+
+/// Default number of groups for GroupNorm in attention blocks.
+pub const ATTENTION_NUM_GROUPS: i64 = 32;

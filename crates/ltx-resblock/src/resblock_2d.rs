@@ -3,7 +3,7 @@ use tch::nn::{ModuleT, Path};
 use tch::Tensor;
 
 use ltx_conv::CausalConv2d;
-use ltx_types::{NormLayerType, LRELU_SLOPE};
+use ltx_types::LRELU_SLOPE;
 
 /// Apply leaky ReLU with a custom negative slope (tch 0.16 `leaky_relu()` takes no args).
 fn leaky_relu(x: &Tensor, negative_slope: f64) -> Tensor {
@@ -33,9 +33,6 @@ impl ResnetBlock2D {
         vs: impl Borrow<Path<'a>>,
         in_channels: i64,
         out_channels: i64,
-        _norm_type: NormLayerType,
-        _norm_groups: i64,
-        _causal: bool,
     ) -> Self {
         let vs = vs.borrow();
 

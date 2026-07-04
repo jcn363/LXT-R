@@ -1,6 +1,7 @@
 use ltx_attention::{RopeType, TransformerAttention};
 use ltx_norm::RMSNorm;
 use ltx_timestep::AdaLayerNormSingle;
+use ltx_types::DEFAULT_SINUSOIDAL_DIM;
 use tch::Tensor;
 
 use crate::feed_forward::FeedForward;
@@ -24,8 +25,8 @@ impl BasicAVTransformerBlock {
         context_dim: Option<i64>,
         rope_type: RopeType,
     ) -> Self {
-        // Python model uses sinusoidal_dim=256 for timestep embedding input
-        let adaln = AdaLayerNormSingle::new_with_input_dim(&(vs / "adaln"), dim, 256);
+        let adaln =
+            AdaLayerNormSingle::new_with_input_dim(&(vs / "adaln"), dim, DEFAULT_SINUSOIDAL_DIM);
         let self_attn = TransformerAttention::new(
             &(vs / "self_attn"),
             dim,

@@ -73,7 +73,7 @@ pub fn compute_tile_grid(
     let tile_size_t = config.tile_size_frames / time_scale;
     let tile_overlap_t = config.tile_overlap_frames / time_scale;
     let tile_size_h = config.tile_size_px / height_scale;
-    let tile_overlap_h = config.tile_overlap_px / width_scale;
+    let tile_overlap_h = config.tile_overlap_px / height_scale;
     let tile_size_w = config.tile_size_px / width_scale;
     let tile_overlap_w = config.tile_overlap_px / width_scale;
 

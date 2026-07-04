@@ -4,7 +4,6 @@ use tch::Tensor;
 
 use ltx_conv::AsymConvTranspose2d;
 use ltx_resblock::ResnetBlock2D;
-use ltx_types::NormLayerType;
 
 /// A single upsampling stage: ConvTranspose2d → ResnetBlock2D.
 pub struct UpsampleStage {
@@ -33,8 +32,6 @@ impl UpsampleStage {
 pub fn build_upsampling_path<'a>(
     vs: impl Borrow<Path<'a>>,
     channels: &[i64],
-    norm_type: NormLayerType,
-    norm_groups: i64,
 ) -> Vec<UpsampleStage> {
     let vs = vs.borrow();
     let num_stages = channels.len();
@@ -63,9 +60,6 @@ pub fn build_upsampling_path<'a>(
             vs / format!("resblock_{i}"),
             out_ch,
             out_ch,
-            norm_type,
-            norm_groups,
-            true,
         );
 
         stages.push(UpsampleStage { conv, resblock });
@@ -103,8 +97,6 @@ mod tests {
         let stages = build_upsampling_path(
             root / "up",
             &channels,
-            NormLayerType::Group,
-            ltx_types::VAE_NORM_NUM_GROUPS,
         );
         assert_eq!(stages.len(), 3);
 
