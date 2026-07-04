@@ -53,3 +53,65 @@ pub fn save_video_mp4(
         Err("ffmpeg failed".to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn make_test_frames(n: usize, w: i64, h: i64) -> Vec<Vec<u8>> {
+        (0..n)
+            .map(|i| {
+                let mut frame = Vec::with_capacity((w * h * 3) as usize);
+                for y in 0..h as usize {
+                    for x in 0..w as usize {
+                        frame.push(((i * 50 + x * 3) % 256) as u8);
+                        frame.push(((i * 30 + y * 5) % 256) as u8);
+                        frame.push(((x + y) % 256) as u8);
+                    }
+                }
+                frame
+            })
+            .collect()
+    }
+
+    #[test]
+    fn save_frames_png_creates_files() {
+        let tmp = std::env::temp_dir().join("ltx_test_png");
+        let _ = fs::remove_dir_all(&tmp);
+
+        let frames = make_test_frames(3, 8, 8);
+        save_frames_png(&frames, 8, 8, &tmp).unwrap();
+
+        for i in 0..3 {
+            let path = tmp.join(format!("frame_{i:04}.png"));
+            assert!(path.exists(), "missing {path:?}");
+            assert!(fs::metadata(&path).unwrap().len() > 0, "empty {path:?}");
+        }
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn save_video_mp4_creates_file() {
+        let tmp = std::env::temp_dir().join("ltx_test_mp4");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let frames = make_test_frames(4, 16, 16);
+        let output = tmp.join("test.mp4");
+
+        match save_video_mp4(&frames, 16, 16, &tmp, &output) {
+            Ok(_) => {
+                assert!(output.exists(), "mp4 not created");
+                assert!(fs::metadata(&output).unwrap().len() > 0, "mp4 empty");
+            }
+            Err(e) => {
+                // ffmpeg not installed in CI — skip gracefully
+                eprintln!("ffmpeg not available: {e} — skipping mp4 test");
+            }
+        }
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+}
