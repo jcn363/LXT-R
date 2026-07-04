@@ -223,6 +223,76 @@ def generate_scheduler(out_dir: str):
     print(f"  Generated scheduler_n*.safetensors")
 
 
+# ── GroupNorm ─────────────────────────────────────────────────────────────
+
+def generate_group_norm(out_dir: str):
+    """Generate golden data for GroupNorm."""
+    num_groups = 4
+    num_channels = 16
+    norm = torch.nn.GroupNorm(num_groups, num_channels, eps=1e-6)
+
+    x = torch.randn(1, num_channels, 4, 8, 8)
+    out = norm(x)
+
+    save_file({"input": x, "output": out}, os.path.join(out_dir, "group_norm.safetensors"))
+    print(f"  Generated group_norm.safetensors")
+
+
+# ── PixelNorm ─────────────────────────────────────────────────────────────
+
+def generate_pixel_norm(out_dir: str):
+    """Generate golden data for PixelNorm."""
+    eps = 1e-6
+
+    def pixel_norm(x, eps=1e-6):
+        mean_sq = (x * x).mean(dim=1, keepdim=True)
+        return x / (mean_sq + eps).sqrt()
+
+    x = torch.randn(1, 4, 8, 8)
+    out = pixel_norm(x, eps)
+
+    save_file({"input": x, "output": out}, os.path.join(out_dir, "pixel_norm.safetensors"))
+    print(f"  Generated pixel_norm.safetensors")
+
+
+# ── TimestepMLP ──────────────────────────────────────────────────────────
+
+def generate_timestep_mlp(out_dir: str):
+    """Generate golden data for TimestepMLP."""
+    dim = 64
+
+    torch.manual_seed(42)
+    mlp = torch.nn.Sequential(
+        torch.nn.Linear(dim, dim),
+        torch.nn.SiLU(),
+        torch.nn.Linear(dim, dim),
+    )
+
+    x = torch.randn(1, dim)
+    out = mlp(x)
+
+    save_file({"input": x, "output": out}, os.path.join(out_dir, "timestep_mlp.safetensors"))
+    print(f"  Generated timestep_mlp.safetensors")
+
+
+# ── Patchify 4D ──────────────────────────────────────────────────────────
+
+def generate_patchify_4d(out_dir: str):
+    """Generate golden data for patchify_4d."""
+    def patchify_4d(x, p):
+        b, c, h, w = x.shape
+        return x.reshape(b, c, h // p, p, w // p, p) \
+                 .permute(0, 1, 3, 5, 2, 4) \
+                 .reshape(b, c * p * p, h // p, w // p)
+
+    x = torch.randn(1, 3, 32, 32)
+    p = 8
+    patched = patchify_4d(x, p)
+
+    save_file({"input": x, "patched": patched}, os.path.join(out_dir, "patchify_4d.safetensors"))
+    print(f"  Generated patchify_4d.safetensors")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main():
@@ -237,9 +307,13 @@ def main():
     torch.manual_seed(42)  # Reproducible
 
     generate_rms_norm(out_dir)
+    generate_group_norm(out_dir)
+    generate_pixel_norm(out_dir)
     generate_sinusoidal(out_dir)
+    generate_timestep_mlp(out_dir)
     generate_rope(out_dir)
     generate_patchify(out_dir)
+    generate_patchify_4d(out_dir)
     generate_fp8(out_dir)
     generate_scheduler(out_dir)
 

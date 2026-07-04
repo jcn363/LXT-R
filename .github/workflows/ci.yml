@@ -71,5 +71,11 @@ jobs:
             --glob="!**/lib.rs" \
             -q && exit 1 || exit 0
 
+      - name: Regenerate golden files
+        run: |
+          pip install torch safetensors numpy --break-system-packages -q
+          python3 scripts/generate_goldens.py
+          git diff --exit-code crates/goldens/ || (echo "Golden files out of date! Run: python3 scripts/generate_goldens.py" && exit 1)
+
       - name: Test
         run: cargo test --workspace

@@ -32,3 +32,19 @@ fn test_group_norm_custom_eps() {
     let out = norm.forward(&x);
     assert_eq!(out.size(), vec![1, 8, 4, 4]);
 }
+
+// ── Golden test (Python reference) ───────────────────────────────────────
+
+/// Golden test: GroupNorm output matches Python reference.
+#[test]
+fn test_golden_group_norm() {
+    let input = ltx_test_utils::load_golden("crates/goldens/group_norm.safetensors", "input");
+    let expected = ltx_test_utils::load_golden("crates/goldens/group_norm.safetensors", "output");
+
+    let num_channels = input.size()[1];
+    let num_groups = 4;
+    let norm = ltx_norm::GroupNorm::with_defaults(num_groups, num_channels);
+    let actual = norm.forward(&input);
+
+    ltx_test_utils::assert_allclose(&actual, &expected, 1e-5, 1e-5);
+}

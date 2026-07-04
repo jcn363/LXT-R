@@ -32,3 +32,17 @@ fn test_pixel_norm_custom_eps() {
     let out = norm.forward(&x);
     assert_eq!(out.size(), vec![1, 3, 8, 8]);
 }
+
+// ── Golden test (Python reference) ───────────────────────────────────────
+
+/// Golden test: PixelNorm output matches Python reference.
+#[test]
+fn test_golden_pixel_norm() {
+    let input = ltx_test_utils::load_golden("crates/goldens/pixel_norm.safetensors", "input");
+    let expected = ltx_test_utils::load_golden("crates/goldens/pixel_norm.safetensors", "output");
+
+    let norm = ltx_norm::PixelNorm::new(1e-6);
+    let actual = norm.forward(&input);
+
+    ltx_test_utils::assert_allclose(&actual, &expected, 1e-5, 1e-5);
+}
