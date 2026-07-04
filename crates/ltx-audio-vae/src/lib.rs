@@ -1,3 +1,8 @@
+//! Audio VAE for the LTX-2.3 Rust rewrite.
+//!
+//! Provides AudioEncoder and AudioDecoder for converting between
+//! waveform and latent-space audio representations.
+
 pub mod causality;
 pub mod configurator;
 pub mod downsample;

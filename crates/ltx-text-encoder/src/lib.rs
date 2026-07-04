@@ -1,3 +1,8 @@
+//! Text encoder for the LTX-2.3 Rust rewrite.
+//!
+//! Provides GemmaTextEncoder (48-layer transformer) and SigLIPVisionTower (27-layer)
+//! for encoding text and image inputs into embeddings.
+
 pub mod config;
 pub mod configurator;
 pub mod embeddings_connector;

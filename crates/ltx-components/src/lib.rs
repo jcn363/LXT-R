@@ -1,3 +1,8 @@
+//! Diffusion pipeline components for the LTX-2.3 Rust rewrite.
+//!
+//! Provides schedulers (sigma schedules), guiders (CFG, STG, APG),
+//! noisers (Gaussian noise), and diffusion steps (Euler, Res2s).
+
 pub mod diffusion_step;
 pub mod guider;
 pub mod noiser;

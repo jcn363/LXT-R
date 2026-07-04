@@ -1,3 +1,8 @@
+//! Video VAE (Variational Autoencoder) for the LTX-2.3 Rust rewrite.
+//!
+//! Provides VideoEncoder and VideoDecoder for converting between
+//! pixel-space and latent-space video representations.
+
 pub mod configurator;
 pub mod decoder_blocks;
 pub mod encoder_blocks;

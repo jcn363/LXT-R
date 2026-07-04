@@ -1,3 +1,8 @@
+//! Convolution layers for the LTX-2.3 Rust rewrite.
+//!
+//! Provides CausalConv2d, CausalConv3d, DualConv3d, and factory functions
+//! for creating convolution layers with various configurations.
+
 pub mod causal_conv2d;
 pub mod causal_conv3d;
 pub mod dual_conv3d;

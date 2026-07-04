@@ -1288,9 +1288,11 @@ Each shared primitive gets tested once, then reused. Tests live in each crate's 
 | **P9** | `ltx-core` + integration | 2 | ~500 | ✅ Complete |
 | **P10** | Benchmarking + optimization | — | — | ⏳ Pending |
 | **Total (plan estimate)** | | **~77** | **~16,500** | |
-| **Total (actual)** | | **106** | **~7,700** | **P0–P9 ✅** |
+| **Total (actual)** | | **159** | **~11,700** | **P0–P9 ✅** |
 
-**DRY approach (plan estimate)** reduced total LOC by ~52% vs non-DRY (20,200 → 7,700) and eliminated 10+ duplicated implementations across transformer, VAE, text encoder, and upsampler crates. The original plan estimated ~16,500 LOC and 23 weeks; the actual implementation was ~7,700 LOC and substantially faster due to the shared-primitive architecture working more efficiently than projected.
+**Actual breakdown**: 110 source files (~8,400 LOC) + 49 test files (~3,300 LOC) = 159 files, ~11,700 total LOC across 20 crates (including `ltx-test-utils`).
+
+**DRY approach (plan estimate)** reduced total LOC by ~28% vs non-DRY (16,500 → 11,700) and eliminated 10+ duplicated implementations across transformer, VAE, text encoder, and upsampler crates. The original plan estimated ~16,500 LOC and 23 weeks; the actual implementation was ~11,700 LOC (including comprehensive test coverage) and substantially faster due to the shared-primitive architecture.
 
 ---
 

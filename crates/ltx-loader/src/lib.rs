@@ -1,3 +1,8 @@
+//! Model loading for the LTX-2.3 Rust rewrite.
+//!
+//! Provides safetensors loading, state dict management, LoRA fusion,
+//! and a builder for constructing models from checkpoints.
+
 pub mod builder;
 pub mod kernels;
 pub mod lora;

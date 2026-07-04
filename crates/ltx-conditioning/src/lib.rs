@@ -1,3 +1,9 @@
+//! Conditioning utilities for the LTX-2.3 Rust rewrite.
+//!
+//! Provides attention masks (causal, padding, cross-attention),
+//! conditioning types (LatentCond, ReferenceVideo, Keyframe),
+//! and the ConditioningItem trait.
+
 pub mod item;
 pub mod mask_utils;
 pub mod types;

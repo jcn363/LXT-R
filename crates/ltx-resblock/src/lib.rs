@@ -1,3 +1,8 @@
+//! Residual blocks for the LTX-2.3 Rust rewrite.
+//!
+//! Provides ResnetBlock1D, ResnetBlock2D, ResnetBlock3D, UNetMidBlock3D,
+//! and a factory function for creating residual blocks with various configurations.
+
 pub mod factory;
 pub mod resblock_1d;
 pub mod resblock_2d;

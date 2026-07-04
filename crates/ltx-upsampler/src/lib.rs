@@ -1,3 +1,8 @@
+//! Latent upsampler for the LTX-2.3 Rust rewrite.
+//!
+//! Provides LatentUpsampler for increasing spatial resolution of video latents
+//! using PixelShuffle, blur downsampling, and rational resampling.
+
 pub mod blur_downsample;
 pub mod configurator;
 pub mod pixel_shuffle;

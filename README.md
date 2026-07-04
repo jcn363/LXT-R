@@ -1,10 +1,10 @@
-# LXT-R
+# LTX-R
 
 Rust rewrite of [LTX-2.3](https://github.com/LightricksResearch/LTX-Video) core — a modular, DRY, SSOT-enforced workspace for video/audio generative models.
 
 ## Architecture
 
-19 crates, ~7,570 LOC. All model logic is pure Rust; external FFI (`tch`, CUDA) is isolated behind safe APIs.
+20 crates, ~11,700 LOC (110 source files + 49 test files). All model logic is pure Rust; external FFI (`tch`, CUDA) is isolated behind safe APIs.
 
 ```
 ltx-core (facade)
@@ -20,10 +20,12 @@ ltx-core (facade)
 ├── Model crates:
 │   ├── ltx-transformer, ltx-video-vae, ltx-audio-vae, ltx-upsampler
 │   └── ltx-text-encoder (Gemma3 + SigLIP)
-└── Infrastructure:
-    ├── ltx-loader, ltx-quantization
-    ├── ltx-components, ltx-conditioning, ltx-guidance
-    └── ltx-core (public API)
+├── Infrastructure:
+│   ├── ltx-loader, ltx-quantization
+│   ├── ltx-components, ltx-conditioning, ltx-guidance
+│   └── ltx-core (public API)
+└── Testing:
+    └── ltx-test-utils (golden file loading, assertions, fixtures)
 ```
 
 ## Prerequisites

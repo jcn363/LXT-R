@@ -1,3 +1,8 @@
+//! Attention mechanisms for the LTX-2.3 Rust rewrite.
+//!
+//! Provides RoPE (Rotary Position Embeddings), SDPA (Scaled Dot-Product Attention),
+//! TransformerAttention (Q/K/V with gating), SimpleAttnBlock (Conv2d-based), and a factory.
+
 pub mod factory;
 pub mod rope;
 pub mod sdpa;

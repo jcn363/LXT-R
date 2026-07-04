@@ -1,3 +1,8 @@
+//! FP8 (8-bit floating point) operations for the LTX-2.3 Rust rewrite.
+//!
+//! Provides FP8 quantization, dequantization, stochastic rounding, and cuBLAS FFI
+//! for efficient low-precision computation.
+
 pub mod cast;
 pub mod cublas;
 pub mod dequantize;

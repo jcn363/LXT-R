@@ -1,3 +1,8 @@
+//! Patchification operations for the LTX-2.3 Rust rewrite.
+//!
+//! Provides patchify/unpatchify ops for 4D, 5D, and audio tensors,
+//! video and audio patchifiers, tiling utilities, and coordinate helpers.
+
 pub mod audio_patchifier;
 pub mod coords;
 pub mod ops;
