@@ -1,47 +1,28 @@
 use ltx_norm::RMSNorm;
-use tch::Tensor;
+use ltx_test_utils::{assert_allclose, load_golden};
 
-/// Golden test for RMSNorm.
-///
-/// This test verifies the Rust RMSNorm implementation matches hand-computed
-/// expected values. When Python golden files are available, replace the
-/// expected values with `load_golden("crates/goldens/rms_norm.safetensors", "output")`.
+/// Golden test: RMSNorm with all-ones input matches Python reference.
 #[test]
-fn test_golden_rms_norm_values() {
-    let dim = 4;
+fn test_golden_rms_norm_ones() {
+    let input = load_golden("crates/goldens/rms_norm_ones.safetensors", "input");
+    let expected = load_golden("crates/goldens/rms_norm_ones.safetensors", "output");
+
+    let dim = input.size()[2];
     let norm = RMSNorm::new(dim, 1e-6, tch::Device::Cpu);
+    let actual = norm.forward(&input);
 
-    // Hand-computed input: all ones
-    let x = Tensor::ones([1, 2, dim], (tch::Kind::Float, tch::Device::Cpu));
-    let out = norm.forward(&x);
-
-    // RMSNorm: x / sqrt(mean(x^2) + eps) * weight
-    // mean(ones^2) = 1.0, sqrt(1.0 + 1e-6) ≈ 1.0, so output ≈ ones
-    assert_eq!(out.size(), vec![1, 2, dim]);
-    let max_diff = (&out - &x).abs().max().double_value(&[]);
-    assert!(
-        max_diff < 1e-4,
-        "RMSNorm golden test: max diff = {max_diff}, expected < 1e-4"
-    );
+    assert_allclose(&actual, &expected, 1e-5, 1e-5);
 }
 
-/// Verify RMSNorm with non-trivial input matches expected output.
+/// Golden test: RMSNorm with random input matches Python reference.
 #[test]
 fn test_golden_rms_norm_nontrivial() {
-    let dim = 4;
+    let input = load_golden("crates/goldens/rms_norm_nontrivial.safetensors", "input");
+    let expected = load_golden("crates/goldens/rms_norm_nontrivial.safetensors", "output");
+
+    let dim = input.size()[2];
     let norm = RMSNorm::new(dim, 1e-6, tch::Device::Cpu);
+    let actual = norm.forward(&input);
 
-    // Input: [1, 2, 3, 4] — RMS = sqrt((1+4+9+16)/4) = sqrt(7.5) ≈ 2.7386
-    let x = Tensor::from_slice(&[1.0, 2.0, 3.0, 4.0]).reshape([1, 1, dim]);
-    let out = norm.forward(&x);
-
-    // Expected: [1, 2, 3, 4] / 2.7386 * weight(≈1.0)
-    let expected = Tensor::from_slice(&[1.0 / 2.7386, 2.0 / 2.7386, 3.0 / 2.7386, 4.0 / 2.7386])
-        .reshape([1, 1, dim]);
-
-    let max_diff = (&out - &expected).abs().max().double_value(&[]);
-    assert!(
-        max_diff < 1e-3,
-        "RMSNorm nontrivial golden test: max diff = {max_diff}"
-    );
+    assert_allclose(&actual, &expected, 1e-5, 1e-5);
 }

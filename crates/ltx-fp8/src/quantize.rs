@@ -104,4 +104,22 @@ mod tests {
         assert_eq!(q.size(), vec![1]);
         assert!(inv_scale.double_value(&[]) > 0.0);
     }
+
+    // ── Golden tests (Python reference) ──────────────────────────────────
+
+    /// Golden test: FP8 quantization with normal weights matches Python.
+    #[test]
+    fn test_golden_fp8_quantize_normal() {
+        let weight = ltx_test_utils::load_golden("crates/goldens/fp8_quantize_normal.safetensors", "weight");
+        let expected_q = ltx_test_utils::load_golden("crates/goldens/fp8_quantize_normal.safetensors", "quantized");
+        let expected_inv_scale = ltx_test_utils::load_golden("crates/goldens/fp8_quantize_normal.safetensors", "inv_scale");
+
+        let (q, inv_scale) = quantize_weight_to_fp8_per_tensor(&weight);
+        let q_f32 = q.to_kind(tch::Kind::Float);
+
+        // Dequantize and compare
+        let recovered = &q_f32 * &inv_scale;
+        let expected_recovered = &expected_q * &expected_inv_scale;
+        ltx_test_utils::assert_allclose(&recovered, &expected_recovered, 0.5, 0.1);
+    }
 }

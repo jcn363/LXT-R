@@ -1,11 +1,19 @@
+use std::path::PathBuf;
 use tch::Tensor;
 
 /// Load a tensor from a safetensors file as f32.
 ///
 /// All dtypes are converted to f32 for comparison — golden tests
 /// compare numerical values, not storage formats.
+///
+/// The path is resolved relative to the workspace root (where Cargo.toml is).
 pub fn load_golden(path: &str, name: &str) -> Tensor {
-    let data = std::fs::read(path).expect("failed to read safetensors file");
+    // Try to find the file relative to workspace root
+    let workspace_root = find_workspace_root();
+    let full_path = workspace_root.join(path);
+
+    let data = std::fs::read(&full_path)
+        .unwrap_or_else(|e| panic!("failed to read safetensors file at {:?}: {}", full_path, e));
     let tensors = safetensors::SafeTensors::deserialize(&data).expect("failed to deserialize");
     let view = tensors.tensor(name).expect("tensor not found");
     let dtype = view.dtype();
@@ -39,7 +47,28 @@ pub fn load_golden(path: &str, name: &str) -> Tensor {
 
 /// List all tensor names in a safetensors file.
 pub fn list_golden_tensors(path: &str) -> Vec<String> {
-    let data = std::fs::read(path).expect("failed to read safetensors file");
+    let workspace_root = find_workspace_root();
+    let full_path = workspace_root.join(path);
+    let data = std::fs::read(&full_path).expect("failed to read safetensors file");
     let tensors = safetensors::SafeTensors::deserialize(&data).expect("failed to deserialize");
     tensors.names().iter().map(|s| s.to_string()).collect()
+}
+
+/// Find the workspace root by looking for Cargo.toml.
+fn find_workspace_root() -> PathBuf {
+    // Try CARGO_MANIFEST_DIR first (for the crate being compiled)
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let manifest_path = PathBuf::from(&manifest_dir);
+        // The workspace root is typically 2 levels up from a crate (crates/<name>)
+        if let Some(parent) = manifest_path.parent() {
+            if let Some(workspace) = parent.parent() {
+                if workspace.join("Cargo.toml").exists() {
+                    return workspace.to_path_buf();
+                }
+            }
+        }
+    }
+
+    // Fallback: try current directory
+    PathBuf::from(".")
 }

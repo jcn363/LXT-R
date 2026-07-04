@@ -8,5 +8,8 @@ ltx-types = { path = "../ltx-types" }
 ltx-norm = { path = "../ltx-norm" }
 tch = { workspace = true }
 
+[dev-dependencies]
+ltx-test-utils = { path = "../ltx-test-utils" }
+
 [lints]
 workspace = true

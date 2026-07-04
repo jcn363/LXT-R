@@ -48,3 +48,17 @@ fn test_golden_rope_norm_preservation() {
         "RoPE golden test: norm changed by {rel_diff} (before={norm_before}, after={norm_after})"
     );
 }
+
+/// Golden test: RoPE precompute cos/sin match Python reference.
+#[test]
+fn test_golden_rope_precompute_from_file() {
+    let expected_cos = ltx_test_utils::load_golden("crates/goldens/rope_precompute.safetensors", "cos");
+    let expected_sin = ltx_test_utils::load_golden("crates/goldens/rope_precompute.safetensors", "sin");
+
+    let dim = expected_cos.size()[1] * 2;
+    let max_seq = expected_cos.size()[0];
+    let (cos, sin) = precompute_freqs_cis(dim, max_seq, 10000.0, RopeType::Split, Device::Cpu);
+
+    ltx_test_utils::assert_allclose(&cos, &expected_cos, 1e-5, 1e-5);
+    ltx_test_utils::assert_allclose(&sin, &expected_sin, 1e-5, 1e-5);
+}

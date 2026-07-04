@@ -222,4 +222,24 @@ mod tests {
             }
         }
     }
+
+    // ── Golden tests (Python reference) ──────────────────────────────────
+
+    /// Golden test: Ltx2Scheduler sigma schedule matches Python for various n_steps.
+    #[test]
+    fn test_golden_scheduler_ltx2() {
+        use ltx_test_utils::{assert_allclose, load_golden};
+
+        let sched = Ltx2Scheduler::default();
+        for &n in &[0, 1, 5, 10, 50] {
+            let expected = load_golden(
+                &format!("crates/goldens/scheduler_n{n}.safetensors"),
+                "sigmas",
+            );
+            let actual: Vec<f64> = sched.sigmas(n).into_iter().collect();
+            let actual_f32: Vec<f32> = actual.iter().map(|&v| v as f32).collect();
+            let actual_t = tch::Tensor::from_slice(&actual_f32);
+            assert_allclose(&actual_t, &expected.to_kind(tch::Kind::Float), 1e-5, 1e-5);
+        }
+    }
 }
