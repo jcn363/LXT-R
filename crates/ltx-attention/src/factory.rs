@@ -1,10 +1,12 @@
-use tch::nn::ModuleT;
+use std::borrow::Borrow;
+use tch::nn::{ModuleT, Path};
 
 use crate::rope::RopeType;
 use crate::simple_attn::SimpleAttnBlock;
 use crate::transformer_attn::TransformerAttention;
 
-pub fn make_attention(
+pub fn make_attention<'a>(
+    vs: impl Borrow<Path<'a>>,
     attn_type: &str,
     dim: i64,
     heads: i64,
@@ -12,8 +14,10 @@ pub fn make_attention(
     context_dim: Option<i64>,
     rope_type: RopeType,
 ) -> Result<Box<dyn ModuleT + Send>, String> {
+    let vs = vs.borrow();
     match attn_type {
         "transformer" => Ok(Box::new(TransformerAttention::new(
+            vs,
             dim,
             heads,
             head_dim,
@@ -22,6 +26,7 @@ pub fn make_attention(
         ))),
         "simple" => Ok(Box::new(SimpleAttnBlock::new(dim))),
         "gated" => Ok(Box::new(TransformerAttention::new_gated(
+            vs,
             dim,
             heads,
             head_dim,

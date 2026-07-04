@@ -25,9 +25,22 @@ impl BasicAVTransformerBlock {
         rope_type: RopeType,
     ) -> Self {
         let adaln = AdaLayerNormSingle::new(&(vs / "adaln"), dim);
-        let self_attn = TransformerAttention::new(dim, num_heads, head_dim, None, rope_type);
-        let cross_attn =
-            TransformerAttention::new(dim, num_heads, head_dim, context_dim, rope_type);
+        let self_attn = TransformerAttention::new(
+            &(vs / "self_attn"),
+            dim,
+            num_heads,
+            head_dim,
+            None,
+            rope_type,
+        );
+        let cross_attn = TransformerAttention::new(
+            &(vs / "cross_attn"),
+            dim,
+            num_heads,
+            head_dim,
+            context_dim,
+            rope_type,
+        );
         let norm1 = RMSNorm::default_eps(dim, vs.device());
         let norm_cross = RMSNorm::default_eps(dim, vs.device());
         let norm2 = RMSNorm::default_eps(dim, vs.device());

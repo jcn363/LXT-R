@@ -1,5 +1,6 @@
 use ltx_norm::RMSNorm;
-use tch::nn::{Linear, ModuleT};
+use std::borrow::Borrow;
+use tch::nn::{Linear, ModuleT, Path};
 use tch::Tensor;
 
 use crate::rope::{self, RopeType};
@@ -30,23 +31,23 @@ impl std::fmt::Debug for TransformerAttention {
 }
 
 impl TransformerAttention {
-    pub fn new(
+    pub fn new<'a>(
+        vs: impl Borrow<Path<'a>>,
         dim: i64,
         heads: i64,
         head_dim: i64,
         context_dim: Option<i64>,
         rope_type: RopeType,
     ) -> Self {
-        let vs = tch::nn::VarStore::new(tch::Device::Cpu);
-        let root = vs.root();
+        let vs = vs.borrow();
         let context_dim = context_dim.unwrap_or(dim);
         Self {
-            to_q: tch::nn::linear(&root, dim, dim, Default::default()),
-            to_k: tch::nn::linear(&root, context_dim, dim, Default::default()),
-            to_v: tch::nn::linear(&root, context_dim, dim, Default::default()),
-            to_out: tch::nn::linear(&root, dim, dim, Default::default()),
-            q_norm: RMSNorm::default_eps(dim, tch::Device::Cpu),
-            k_norm: RMSNorm::default_eps(dim, tch::Device::Cpu),
+            to_q: tch::nn::linear(vs / "to_q", dim, dim, Default::default()),
+            to_k: tch::nn::linear(vs / "to_k", context_dim, dim, Default::default()),
+            to_v: tch::nn::linear(vs / "to_v", context_dim, dim, Default::default()),
+            to_out: tch::nn::linear(vs / "to_out", dim, dim, Default::default()),
+            q_norm: RMSNorm::default_eps(dim, vs.device()),
+            k_norm: RMSNorm::default_eps(dim, vs.device()),
             num_heads: heads,
             head_dim,
             rope_type,
@@ -54,27 +55,27 @@ impl TransformerAttention {
         }
     }
 
-    pub fn new_gated(
+    pub fn new_gated<'a>(
+        vs: impl Borrow<Path<'a>>,
         dim: i64,
         heads: i64,
         head_dim: i64,
         context_dim: Option<i64>,
         rope_type: RopeType,
     ) -> Self {
-        let vs = tch::nn::VarStore::new(tch::Device::Cpu);
-        let root = vs.root();
+        let vs = vs.borrow();
         let context_dim = context_dim.unwrap_or(dim);
         Self {
-            to_q: tch::nn::linear(&root, dim, dim, Default::default()),
-            to_k: tch::nn::linear(&root, context_dim, dim, Default::default()),
-            to_v: tch::nn::linear(&root, context_dim, dim, Default::default()),
-            to_out: tch::nn::linear(&root, dim, dim, Default::default()),
-            q_norm: RMSNorm::default_eps(dim, tch::Device::Cpu),
-            k_norm: RMSNorm::default_eps(dim, tch::Device::Cpu),
+            to_q: tch::nn::linear(vs / "to_q", dim, dim, Default::default()),
+            to_k: tch::nn::linear(vs / "to_k", context_dim, dim, Default::default()),
+            to_v: tch::nn::linear(vs / "to_v", context_dim, dim, Default::default()),
+            to_out: tch::nn::linear(vs / "to_out", dim, dim, Default::default()),
+            q_norm: RMSNorm::default_eps(dim, vs.device()),
+            k_norm: RMSNorm::default_eps(dim, vs.device()),
             num_heads: heads,
             head_dim,
             rope_type,
-            gate_logits: Some(tch::nn::linear(&root, dim, dim, Default::default())),
+            gate_logits: Some(tch::nn::linear(vs / "gate_logits", dim, dim, Default::default())),
         }
     }
 
