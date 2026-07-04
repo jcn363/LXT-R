@@ -50,8 +50,11 @@ def map_key(key: str) -> str:
     if key.startswith('vae.decoder.'):
         key = 'decoder.' + key[len('vae.decoder.'):]
 
-    # Map text encoder keys: text_encoder.blocks.N.* → text_encoder.blocks.N.*
-    # (already in correct format from merge)
+    # Map decoder up_blocks to up_N format
+    # Python: decoder.up_blocks.0.res_blocks.0.conv1 → Rust: decoder.up_0.resblocks.0.conv1
+    key = re.sub(r'decoder\.up_blocks\.(\d+)\.res_blocks\.', r'decoder.up_\1.resblocks.', key)
+    key = re.sub(r'decoder\.up_blocks\.(\d+)\.time_embedder\.', r'decoder.up_\1.time_embedder.', key)
+    key = re.sub(r'decoder\.up_blocks\.(\d+)\.conv\.', r'decoder.up_\1.conv.', key)
 
     # Map feed forward keys
     key = key.replace('.ff.net.0.proj.', '.ff.net_0.')

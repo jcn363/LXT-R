@@ -213,7 +213,7 @@ fn main() {
     println!("Output max:    {:.6}", x.max().double_value(&[]));
     println!("Output finite: {}", x.isfinite().all().double_value(&[]) > 0.0);
 
-    // Decode latent to pixel space (simple channel mixing — VAE decoder not yet wired)
+    // Decode latent to pixel space (simple channel mixing — VAE decoder architecture mismatch pending)
     let pixel = {
         let p = x.clamp(-1.0, 1.0);
         let r = p.narrow(1, 0, 1).squeeze_dim(1);
