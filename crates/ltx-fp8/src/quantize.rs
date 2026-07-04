@@ -99,7 +99,7 @@ mod tests {
     /// Quantize single element should work.
     #[test]
     fn test_quantize_single_element() {
-        let w = Tensor::from_slice(&[3.14]);
+        let w = Tensor::from_slice(&[std::f64::consts::PI as f32]);
         let (q, inv_scale) = quantize_weight_to_fp8_per_tensor(&w);
         assert_eq!(q.size(), vec![1]);
         assert!(inv_scale.double_value(&[]) > 0.0);
