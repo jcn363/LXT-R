@@ -42,28 +42,49 @@ cargo build --workspace
 # With random weights (demo mode)
 cargo run --bin ltx-inference -- --steps 4
 
-# With trained weights
-python3 scripts/convert_weights.py --input model.pt --output weights.safetensors
-cargo run --bin ltx-inference -- --weights weights.safetensors --steps 10
+# Download LTX-Video weights from HuggingFace
+python3 -c "
+from huggingface_hub import hf_hub_download
+hf_hub_download('Lightricks/LTX-Video', 'ltxv-2b-0.9.8-distilled.safetensors', local_dir='weights')
+"
+
+# Convert to Rust format
+python3 scripts/convert_ltx_weights.py --input weights/ltxv-2b-0.9.8-distilled.safetensors --output weights_rust.safetensors
+
+# Run with real weights
+cargo run --bin ltx-inference -- --weights weights_rust.safetensors --steps 10
 ```
 
 ### Run Tests
 
 ```bash
-cargo test --workspace  # 381 tests
+cargo test --workspace  # 384 tests
 ```
 
 ## Weight Conversion
 
-Convert PyTorch checkpoints to safetensors format for Rust inference:
+### LTX-Video Models (Recommended)
+
+Convert HuggingFace LTX-Video weights to Rust-compatible format:
 
 ```bash
-# From PyTorch checkpoint (.pt/.pth)
-python3 scripts/convert_weights.py --input model.pt --output weights.safetensors
+# Download from HuggingFace
+python3 -c "
+from huggingface_hub import hf_hub_download
+hf_hub_download('Lightricks/LTX-Video', 'ltxv-2b-0.9.8-distilled.safetensors', local_dir='weights')
+"
 
-# From HuggingFace model
-huggingface-cli download Lightricks/LTX-Video --local-dir ./ltx-weights
-python3 scripts/convert_weights.py --input ./ltx-weights/model.pt --output weights.safetensors
+# Convert to Rust format (handles key remapping, adaln duplication)
+python3 scripts/convert_ltx_weights.py --input weights/ltxv-2b-0.9.8-distilled.safetensors --output weights_rust.safetensors
+```
+
+### Generic PyTorch Models
+
+For custom checkpoints (.pt/.pth):
+
+```bash
+python3 scripts/convert_weights.py --input model.pt --output weights.safetensors
+```
 
 # Preview without saving (dry run)
 python3 scripts/convert_weights.py --input model.pt --output weights.safetensors --dry-run

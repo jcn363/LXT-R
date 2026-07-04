@@ -1,8 +1,6 @@
 /// Tests for model weight loading from safetensors files.
-///
 /// Verifies that weights can be saved and loaded correctly,
 /// and that the VarStore variable names match the expected paths.
-
 use ltx_attention::RopeType;
 use ltx_norm::RMSNorm;
 use ltx_transformer::block::BasicAVTransformerBlock;
@@ -47,7 +45,7 @@ fn test_varstore_keys_structure() {
     }
 
     // Verify we have the right number of variables
-    assert!(keys.len() > 0, "VarStore should have variables");
+    assert!(!keys.is_empty(), "VarStore should have variables");
 
     // Verify expected key patterns exist
     assert!(keys.iter().any(|k| k.contains("self_attn")),
@@ -79,7 +77,7 @@ fn test_model_save_load_roundtrip() {
     assert_eq!(vars1.len(), vars2.len(), "different number of variables");
 
     for (key1, tensor1) in vars1.iter() {
-        let tensor2 = vars2.get(key1).expect(&format!("missing key: {key1}"));
+        let tensor2 = vars2.get(key1).unwrap_or_else(|| panic!("missing key: {key1}"));
         assert_eq!(tensor1.size(), tensor2.size(),
             "shape mismatch for {key1}: {:?} vs {:?}", tensor1.size(), tensor2.size());
     }
