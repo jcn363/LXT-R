@@ -3,6 +3,10 @@ name = "ltx-core"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "ltx-inference"
+path = "src/bin/inference.rs"
+
 [dependencies]
 ltx-types = { path = "../ltx-types" }
 ltx-norm = { path = "../ltx-norm" }
@@ -23,6 +27,7 @@ ltx-text-encoder = { path = "../ltx-text-encoder" }
 ltx-loader = { path = "../ltx-loader" }
 ltx-quantization = { path = "../ltx-quantization" }
 tch = { workspace = true }
+safetensors = { workspace = true }
 
 [lints]
 workspace = true
