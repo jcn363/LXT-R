@@ -156,6 +156,7 @@ impl MultiModal {
 
 impl Guider for MultiModal {
     fn guidance_scale(&self) -> f64 {
+        assert!(!self.weights.is_empty(), "MultiModal has no guiders");
         self.weights.iter().sum::<f64>() / self.weights.len() as f64
     }
 

@@ -74,4 +74,34 @@ mod tests {
         // Inv scale should be positive
         assert!(inv_scale.double_value(&[]) > 0.0);
     }
+
+    // ── Numerical sanity tests ──────────────────────────────────────────
+
+    /// Quantize all-zero tensor should not produce NaN.
+    #[test]
+    fn test_quantize_all_zeros() {
+        let w = Tensor::zeros([16, 32], (tch::Kind::Float, Device::Cpu));
+        let (q, inv_scale) = quantize_weight_to_fp8_per_tensor(&w);
+        assert_eq!(q.to_kind(tch::Kind::Float).isnan().any().double_value(&[]), 0.0);
+        assert!(inv_scale.double_value(&[]) > 0.0);
+    }
+
+    /// Quantize very large values should clamp, not produce Inf.
+    #[test]
+    fn test_quantize_extreme_values() {
+        let w = Tensor::from_slice(&[1e6, -1e6, 1e-6, -1e-6]);
+        let (q, inv_scale) = quantize_weight_to_fp8_per_tensor(&w);
+        let q_f32 = q.to_kind(tch::Kind::Float);
+        assert!(q_f32.isfinite().all().double_value(&[]) > 0.0);
+        assert!(inv_scale.isfinite().all().double_value(&[]) > 0.0);
+    }
+
+    /// Quantize single element should work.
+    #[test]
+    fn test_quantize_single_element() {
+        let w = Tensor::from_slice(&[3.14]);
+        let (q, inv_scale) = quantize_weight_to_fp8_per_tensor(&w);
+        assert_eq!(q.size(), vec![1]);
+        assert!(inv_scale.double_value(&[]) > 0.0);
+    }
 }

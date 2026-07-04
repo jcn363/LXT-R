@@ -7,6 +7,9 @@ use tch::Tensor;
 /// elements form the feature dimension `D = C*p1*p2*p3`.
 pub fn patchify_5d(x: &Tensor, p1: i64, p2: i64, p3: i64) -> Tensor {
     let (b, c, f, h, w) = x.size5().expect("patchify_5d: tensor must be 5D");
+    debug_assert!(f % p1 == 0, "f={f} not divisible by p1={p1}");
+    debug_assert!(h % p2 == 0, "h={h} not divisible by p2={p2}");
+    debug_assert!(w % p3 == 0, "w={w} not divisible by p3={p3}");
     x.reshape([b, c, f / p1, p1, h / p2, p2, w / p3, p3])
         .permute([0, 2, 4, 6, 1, 3, 5, 7])
         .reshape([b, (f / p1) * (h / p2) * (w / p3), c * p1 * p2 * p3])
@@ -41,6 +44,8 @@ pub fn unpatchify_5d(
 /// compact representation with reduced spatial extent.
 pub fn patchify_4d(x: &Tensor, p: i64) -> Tensor {
     let (b, c, h, w) = x.size4().expect("patchify_4d: tensor must be 4D");
+    debug_assert!(h % p == 0, "h={h} not divisible by p={p}");
+    debug_assert!(w % p == 0, "w={w} not divisible by p={p}");
     x.reshape([b, c, h / p, p, w / p, p])
         .permute([0, 1, 3, 5, 2, 4])
         .reshape([b, c * p * p, h / p, w / p])

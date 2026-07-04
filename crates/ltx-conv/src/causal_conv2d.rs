@@ -41,6 +41,7 @@ struct AsymConv2d {
 impl AsymConv2d {
     fn new(vs: &Path, in_c: i64, out_c: i64, k_h: i64, k_w: i64, s_h: i64, s_w: i64) -> Self {
         let fan_in = in_c * k_h * k_w;
+        assert!(fan_in > 0, "fan_in must be positive: in_c={in_c}, k_h={k_h}, k_w={k_w}");
         let std = (2.0 / fan_in as f64).sqrt();
         let weight = vs.var(
             "weight",

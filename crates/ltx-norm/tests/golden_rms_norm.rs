@@ -29,7 +29,7 @@ fn test_golden_rms_norm_values() {
 #[test]
 fn test_golden_rms_norm_nontrivial() {
     let dim = 4;
-    let norm = RMSNorm::new(dim, 0.0, tch::Device::Cpu);
+    let norm = RMSNorm::new(dim, 1e-6, tch::Device::Cpu);
 
     // Input: [1, 2, 3, 4] — RMS = sqrt((1+4+9+16)/4) = sqrt(7.5) ≈ 2.7386
     let x = Tensor::from_slice(&[1.0, 2.0, 3.0, 4.0]).reshape([1, 1, dim]);

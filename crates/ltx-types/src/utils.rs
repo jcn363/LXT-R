@@ -1,15 +1,17 @@
 use tch::Tensor;
 
-use crate::constants::PROJECTION_EPS;
+use crate::constants::{PROJECTION_EPS, STABILITY_EPS};
 
 /// Convert sample + denoised to velocity. THE ONLY implementation.
+///
+/// When sigma is near zero, uses STABILITY_EPS as floor to avoid division by zero.
 pub fn to_velocity(
     sample: &Tensor,
     sigma: f64,
     denoised: &Tensor,
     calc_dtype: tch::Kind,
 ) -> Tensor {
-    assert!(sigma != 0.0, "Sigma can't be 0.0");
+    let sigma = sigma.max(STABILITY_EPS);
     ((sample.to_kind(calc_dtype) - denoised.to_kind(calc_dtype)) / sigma).to_kind(sample.kind())
 }
 

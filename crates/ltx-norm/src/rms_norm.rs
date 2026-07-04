@@ -17,6 +17,7 @@ impl std::fmt::Debug for RMSNorm {
 
 impl RMSNorm {
     pub fn new(dim: i64, eps: f64, device: tch::Device) -> Self {
+        assert!(eps > 0.0, "eps must be positive, got {eps}");
         Self {
             weight: Tensor::ones([dim], (tch::Kind::Float, device)),
             eps,

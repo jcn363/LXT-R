@@ -122,4 +122,27 @@ mod tests {
         // result = x + velocity * (sigma - next_sigma) = 1 + 2*(0.2) = 1.4
         assert!((mean - 1.4).abs() < 1e-5);
     }
+
+    // ── Numerical sanity tests ──────────────────────────────────────────
+
+    /// EulerStep with sigma=0 should not panic or produce NaN.
+    #[test]
+    fn test_euler_step_sigma_zero() {
+        let step = EulerStep;
+        let x = Tensor::ones([1, 4, 8, 8], (tch::Kind::Float, Device::Cpu));
+        let denoised = Tensor::zeros([1, 4, 8, 8], (tch::Kind::Float, Device::Cpu));
+        let result = step.step(&x, 0.0, 0.0, &denoised, tch::Kind::Float);
+        assert!(result.isfinite().all().double_value(&[]) > 0.0);
+    }
+
+    /// Res2sStep should handle edge cases gracefully.
+    #[test]
+    fn test_res2s_step_extreme_sigmas() {
+        let step = Res2sStep::new(1.0);
+        let x = Tensor::ones([1, 4, 8, 8], (tch::Kind::Float, Device::Cpu));
+        let denoised = Tensor::zeros([1, 4, 8, 8], (tch::Kind::Float, Device::Cpu));
+        // Very small sigma difference
+        let result = step.step(&x, 0.001, 0.0009, &denoised, tch::Kind::Float);
+        assert!(result.isfinite().all().double_value(&[]) > 0.0);
+    }
 }

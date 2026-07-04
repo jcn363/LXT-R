@@ -67,3 +67,42 @@ fn test_model_debug_output() {
     assert!(debug_str.contains("num_blocks"));
     assert!(debug_str.contains("3"));
 }
+
+// ── Numerical sanity tests ──────────────────────────────────────────
+
+/// Full model output should be finite (no NaN/Inf from any layer).
+#[test]
+fn test_model_output_finite() {
+    let vs = make_vs();
+    let model = build_model(&vs.root(), 2, 64);
+    let latent = Tensor::randn([1, 4, 64], (Kind::Float, Device::Cpu));
+    let timestep = Tensor::from_slice(&[0.5]);
+    let context = Tensor::randn([1, 3, 64], (Kind::Float, Device::Cpu));
+    let out = model.forward(&latent, &timestep, &context, None, None);
+    assert_eq!(out.isnan().any().double_value(&[]), 0.0, "Model produced NaN");
+    assert!(out.isfinite().all().double_value(&[]) > 0.0, "Model produced Inf");
+}
+
+/// Model with zero input should not produce NaN.
+#[test]
+fn test_model_zero_input() {
+    let vs = make_vs();
+    let model = build_model(&vs.root(), 1, 64);
+    let latent = Tensor::zeros([1, 4, 64], (Kind::Float, Device::Cpu));
+    let timestep = Tensor::from_slice(&[0.0]);
+    let context = Tensor::zeros([1, 3, 64], (Kind::Float, Device::Cpu));
+    let out = model.forward(&latent, &timestep, &context, None, None);
+    assert_eq!(out.isnan().any().double_value(&[]), 0.0, "Model NaN on zero input");
+}
+
+/// Model with extreme timestep should not overflow.
+#[test]
+fn test_model_extreme_timestep() {
+    let vs = make_vs();
+    let model = build_model(&vs.root(), 1, 64);
+    let latent = Tensor::randn([1, 4, 64], (Kind::Float, Device::Cpu));
+    let timestep = Tensor::from_slice(&[1000.0]);
+    let context = Tensor::randn([1, 3, 64], (Kind::Float, Device::Cpu));
+    let out = model.forward(&latent, &timestep, &context, None, None);
+    assert!(out.isfinite().all().double_value(&[]) > 0.0, "Model overflow on extreme timestep");
+}

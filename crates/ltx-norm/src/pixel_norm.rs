@@ -19,6 +19,7 @@ impl Default for PixelNorm {
 
 impl PixelNorm {
     pub fn new(eps: f64) -> Self {
+        assert!(eps > 0.0, "eps must be positive, got {eps}");
         Self { eps }
     }
 

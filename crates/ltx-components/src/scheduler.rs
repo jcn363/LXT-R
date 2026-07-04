@@ -23,6 +23,9 @@ impl Default for LinearQuadratic {
 
 impl Scheduler for LinearQuadratic {
     fn sigmas(&self, n_steps: usize) -> Vec<f64> {
+        if n_steps == 0 {
+            return vec![1.0];
+        }
         let n = n_steps as f64;
         let mut sigmas = Vec::with_capacity(n_steps + 1);
         for i in 0..=n_steps {
@@ -70,6 +73,9 @@ impl Default for Beta {
 
 impl Scheduler for Beta {
     fn sigmas(&self, n_steps: usize) -> Vec<f64> {
+        if n_steps == 0 {
+            return vec![1.0];
+        }
         let n = n_steps as f64;
         let mut sigmas = Vec::with_capacity(n_steps + 1);
         for i in 0..=n_steps {
@@ -117,6 +123,9 @@ impl Default for Ltx2Scheduler {
 
 impl Scheduler for Ltx2Scheduler {
     fn sigmas(&self, n_steps: usize) -> Vec<f64> {
+        if n_steps == 0 {
+            return vec![1.0];
+        }
         let n = n_steps as f64;
         let mut sigmas = Vec::with_capacity(n_steps + 1);
         for i in 0..=n_steps {
@@ -173,6 +182,44 @@ mod tests {
         // Sigmas should be non-increasing
         for w in sigmas.windows(2) {
             assert!(w[0] >= w[1], "sigmas must be non-increasing");
+        }
+    }
+
+    // ── Numerical sanity tests ──────────────────────────────────────────
+
+    /// All schedulers must handle n_steps=0 without NaN.
+    #[test]
+    fn test_scheduler_n_steps_zero_no_nan() {
+        for sched in [
+            Box::new(Ltx2Scheduler::default()) as Box<dyn Scheduler>,
+            Box::new(LinearQuadratic::default()),
+            Box::new(Beta::default()),
+        ] {
+            let sigmas = sched.sigmas(0);
+            assert_eq!(sigmas.len(), 1);
+            assert!(!sigmas[0].is_nan(), "NaN at n_steps=0");
+            assert!(!sigmas[0].is_infinite(), "Inf at n_steps=0");
+        }
+    }
+
+    /// All schedulers must produce finite, non-NaN sigmas for various n_steps.
+    #[test]
+    fn test_scheduler_all_finite() {
+        let schedulers: Vec<Box<dyn Scheduler>> = vec![
+            Box::new(Ltx2Scheduler::default()),
+            Box::new(LinearQuadratic::default()),
+            Box::new(Beta::default()),
+        ];
+        for sched in &schedulers {
+            for &n in &[1, 5, 10, 50, 100] {
+                let sigmas = sched.sigmas(n);
+                for (i, &s) in sigmas.iter().enumerate() {
+                    assert!(!s.is_nan(), "NaN at n_steps={n}, index={i}");
+                    assert!(!s.is_infinite(), "Inf at n_steps={n}, index={i}");
+                    assert!(s >= 0.0, "Negative sigma at n_steps={n}, index={i}: {s}");
+                    assert!(s <= 1.0, "Sigma > 1 at n_steps={n}, index={i}: {s}");
+                }
+            }
         }
     }
 }
