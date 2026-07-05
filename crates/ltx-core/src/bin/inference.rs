@@ -79,6 +79,14 @@ struct Args {
     /// Classifier-free guidance scale
     #[arg(long, default_value_t = 7.5)]
     cfg: f64,
+
+    /// Path to text file with prompts (one per line). Overrides --prompt for each line.
+    #[arg(long)]
+    prompts_file: Option<String>,
+
+    /// Output directory for batch results (default: "batch_output")
+    #[arg(long, default_value = "batch_output")]
+    output_dir: String,
 }
 
 fn parse_device(s: &str) -> Device {
@@ -242,7 +250,22 @@ fn encode_prompt(
 fn main() {
     let args = Args::parse();
     let device = parse_device(&args.device);
+    tch::maybe_init_cuda();
 
+    // Load prompts
+    let prompts = if let Some(ref path) = args.prompts_file {
+        let content = std::fs::read_to_string(path).unwrap_or_else(|e| {
+            eprintln!("error: read {path}: {e}");
+            process::exit(1);
+        });
+        let ps: Vec<String> = content.lines().filter(|l| !l.trim().is_empty()).map(|l| l.trim().to_string()).collect();
+        eprintln!("batch: {} prompts from {path}", ps.len());
+        ps
+    } else {
+        vec![args.prompt.clone()]
+    };
+
+    let batch_mode = prompts.len() > 1;
     let (b, c) = (1i64, 4i64);
     let (p1, p2, p3) = (2i64, 4i64, 4i64);
     let patch_dim = c * p1 * p2 * p3;
@@ -250,123 +273,120 @@ fn main() {
     let dim = if use_random { patch_dim } else { 2048 };
     let num_layers = if use_random { 2 } else { 28 };
 
-    tch::maybe_init_cuda();
-
-    // Phase 1: Encode prompt (loads + frees text encoder)
-    let context = if let (Some(tok), Some(tw)) = (&args.tokenizer, &args.text_weights) {
-        match encode_prompt(tok, tw, &args.prompt) {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                eprintln!("error: {e}");
-                process::exit(1);
-            }
-        }
-    } else {
-        eprintln!("no text encoder — using random context");
-        Tensor::randn([1, 4, dim], (Kind::Float, device))
-    };
-
-    // Phase 2: Build transformer on target device
+    // Phase 1: Load transformer (shared across all prompts)
     eprintln!("loading transformer on {device:?}...");
     let vs = tch::nn::VarStore::new(device);
-    // If text encoder was used, pass its hidden_size as context_dim for cross-attention
-    let context_dim = if !use_random {
-        Some(context.size()[2])
-    } else {
-        None
-    };
-    let model = build_model(&vs.root(), dim, patch_dim, num_layers, context_dim);
 
     let patchify_proj = if !use_random {
-        Some(tch::nn::linear(
-            vs.root() / "patchify_proj",
-            patch_dim,
-            dim,
-            Default::default(),
-        ))
+        Some(tch::nn::linear(vs.root() / "patchify_proj", patch_dim, dim, Default::default()))
     } else {
         None
     };
 
     if let Some(ref path) = args.weights {
         eprintln!("  loading transformer weights...");
-        let _count = load_weights(&vs, path).unwrap_or_else(|e| {
+        let _ = load_weights(&vs, path).unwrap_or_else(|e| {
             eprintln!("error: {e}");
             process::exit(1);
         });
     }
 
     let n_params: usize = vs.variables().values().map(|t| t.numel()).sum();
-    eprintln!(
-        "ready: {dim}d, {num_layers} layers, {:.1}M params, device={device:?}",
-        n_params as f64 / 1e6
-    );
+    eprintln!("ready: {dim}d, {num_layers} layers, {:.1}M params", n_params as f64 / 1e6);
 
-    // Phase 3: Denoise
-    tch::manual_seed(42);
-    let mut x = Tensor::randn(
-        [b, c, args.frames, args.height, args.width],
-        (Kind::Float, device),
-    );
+    // Phase 2: Process each prompt
+    for (idx, prompt) in prompts.iter().enumerate() {
+        let prompt_label = if batch_mode { format!("[{}/{}] ", idx + 1, prompts.len()) } else { String::new() };
 
-    let scheduler = Ltx2Scheduler::default();
-    let guider = CFG::new(args.cfg);
-    let step = EulerStep::new();
-    let sigmas = scheduler.sigmas(args.steps);
-
-    eprintln!("denoising: {} steps, cfg={}", args.steps, args.cfg);
-    for i in 0..args.steps {
-        let sigma = sigmas[i];
-        let next_sigma = sigmas[i + 1];
-
-        let patched = patchify_5d(&x, p1, p2, p3);
-        let projected = if let Some(ref proj) = patchify_proj {
-            proj.forward_t(&patched, false)
+        // Encode prompt (loads + frees text encoder each time in batch mode)
+        let context = if let (Some(tok), Some(tw)) = (&args.tokenizer, &args.text_weights) {
+            eprintln!("{prompt_label}encoding prompt: \"{prompt}\"");
+            match encode_prompt(tok, tw, prompt) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    eprintln!("{prompt_label}error: {e}");
+                    continue;
+                }
+            }
         } else {
-            patched
+            eprintln!("{prompt_label}no text encoder — using random context");
+            Tensor::randn([1, 4, dim], (Kind::Float, device))
         };
 
-        let timestep = Tensor::from_slice(&[sigma as f32]);
-        let cond_pred = model.forward(&projected, &timestep, &context, None, None);
+        // Update model context_dim if text encoder was used
+        let context_dim = if context.size()[2] != dim as i64 {
+            Some(context.size()[2])
+        } else {
+            None
+        };
+        let model = if context_dim.is_some() {
+            build_model(&vs.root(), dim, patch_dim, num_layers, context_dim)
+        } else {
+            build_model(&vs.root(), dim, patch_dim, num_layers, None)
+        };
 
-        let uncond_context = Tensor::zeros(
-            [1, context.size()[1], context.size()[2]],
-            (Kind::Float, device),
-        );
-        let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
+        // Denoise
+        tch::manual_seed(42);
+        let mut x = Tensor::randn([b, c, args.frames, args.height, args.width], (Kind::Float, device));
 
-        let guided = guider.guide(&cond_pred, &uncond_pred);
-        let denoised = unpatchify_5d(
-            &guided,
-            b,
-            c,
-            args.frames,
-            args.height,
-            args.width,
-            p1,
-            p2,
-            p3,
-        );
-        x = step.step(&x, sigma, next_sigma, &denoised, Kind::Float);
+        let scheduler = Ltx2Scheduler::default();
+        let guider = CFG::new(args.cfg);
+        let step = EulerStep::new();
+        let sigmas = scheduler.sigmas(args.steps);
 
-        let mean = x.mean(Kind::Float).double_value(&[]);
-        let std = x.std(false).double_value(&[]);
-        eprintln!(
-            "  [{:>2}/{}] σ={:.4} μ={:.4} σ={:.4}",
-            i + 1,
-            args.steps,
-            sigma,
-            mean,
-            std
-        );
+        eprintln!("{prompt_label}denoising: {} steps, cfg={}", args.steps, args.cfg);
+        for i in 0..args.steps {
+            let sigma = sigmas[i];
+            let next_sigma = sigmas[i + 1];
+
+            let patched = patchify_5d(&x, p1, p2, p3);
+            let projected = if let Some(ref proj) = patchify_proj {
+                proj.forward_t(&patched, false)
+            } else {
+                patched
+            };
+
+            let timestep = Tensor::from_slice(&[sigma as f32]);
+            let cond_pred = model.forward(&projected, &timestep, &context, None, None);
+
+            let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
+            let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
+
+            let guided = guider.guide(&cond_pred, &uncond_pred);
+            let denoised = unpatchify_5d(&guided, b, c, args.frames, args.height, args.width, p1, p2, p3);
+            x = step.step(&x, sigma, next_sigma, &denoised, Kind::Float);
+
+            let mean = x.mean(Kind::Float).double_value(&[]);
+            let s = x.std(false).double_value(&[]);
+            eprintln!("{prompt_label}  [{:>2}/{}] σ={:.4} μ={:.4} σ={:.4}", i + 1, args.steps, sigma, mean, s);
+        }
+
+        // Save output
+        let out_dir = if batch_mode {
+            std::path::PathBuf::from(&args.output_dir).join(format!("{:04}", idx + 1))
+        } else {
+            std::path::PathBuf::from("output_frames")
+        };
+        save_frames(&x.to_device(Device::Cpu), &out_dir, args.frames, args.height, args.width);
+
+        // Save GIF
+        let gif_path = if batch_mode {
+            std::path::PathBuf::from(&args.output_dir).join(format!("{:04}.gif", idx + 1))
+        } else {
+            std::path::PathBuf::from("output.gif")
+        };
+        let _ = std::fs::create_dir_all(gif_path.parent().unwrap_or(std::path::Path::new(".")));
+        if let Err(e) = save_gif(&x.to_device(Device::Cpu), args.frames, args.height, args.width, &gif_path) {
+            eprintln!("{prompt_label}  gif: {e}");
+        } else {
+            eprintln!("{prompt_label}  saved: {}", gif_path.display());
+        }
     }
 
-    // Phase 4: Save output
-    save_frames(&x.to_device(Device::Cpu), args.frames, args.height, args.width);
     eprintln!("done");
 }
 
-fn save_frames(x: &Tensor, frames: i64, h: i64, w: i64) {
+fn save_frames(x: &Tensor, dir: &std::path::Path, frames: i64, h: i64, w: i64) {
     let pixel = {
         let p = x.clamp(-1.0, 1.0);
         let r = p.narrow(1, 0, 1).squeeze_dim(1);
@@ -380,50 +400,60 @@ fn save_frames(x: &Tensor, frames: i64, h: i64, w: i64) {
     let pixel = (pixel - pixel_min) / (pixel_max - pixel_min + STABILITY_EPS);
     let pixel = (pixel * 255.0).to_kind(Kind::Uint8);
 
-    let dir = "output_frames";
     if std::fs::create_dir_all(dir).is_err() {
-        eprintln!("warning: could not create {dir}/");
+        eprintln!("warning: could not create {}/", dir.display());
         return;
     }
 
     use std::io::Write;
     for i in 0..frames {
-        let frame = pixel
-            .narrow(2, i, 1)
-            .reshape([3, h, w])
-            .permute([1, 2, 0]);
-        let path = format!("{dir}/frame_{i:04}.pgm");
+        let frame = pixel.narrow(2, i, 1).reshape([3, h, w]).permute([1, 2, 0]);
+        let path = dir.join(format!("frame_{i:04}.pgm"));
         if let Ok(mut f) = std::fs::File::create(&path) {
             let _ = write!(f, "P6\n{w} {h}\n255\n");
             let data = frame.reshape([h * w * 3]);
-            let bytes: Vec<u8> = (0..data.size()[0])
-                .map(|i| data.double_value(&[i]) as u8)
-                .collect();
+            let bytes: Vec<u8> = (0..data.size()[0]).map(|j| data.double_value(&[j]) as u8).collect();
+            let _ = f.write_all(&bytes);
+        }
+    }
+}
+
+fn save_gif(x: &Tensor, frames: i64, h: i64, w: i64, output: &std::path::Path) -> Result<(), String> {
+    let tmp_dir = output.parent().unwrap_or(std::path::Path::new(".")).join(".tmp_gif");
+    std::fs::create_dir_all(&tmp_dir).map_err(|e| format!("create tmp: {e}"))?;
+
+    // Save PGM frames
+    let pixel = {
+        let p = x.clamp(-1.0, 1.0);
+        let r = p.narrow(1, 0, 1).squeeze_dim(1);
+        let g = p.narrow(1, 1, 1).squeeze_dim(1);
+        let b = p.narrow(1, 2, 1).squeeze_dim(1);
+        Tensor::stack(&[&r, &g, &b], 1)
+    };
+    let pixel_min = pixel.min().double_value(&[]);
+    let pixel_max = pixel.max().double_value(&[]);
+    let pixel = (pixel - pixel_min) / (pixel_max - pixel_min + STABILITY_EPS);
+    let pixel = (pixel * 255.0).to_kind(Kind::Uint8);
+
+    use std::io::Write;
+    for i in 0..frames {
+        let frame = pixel.narrow(2, i, 1).reshape([3, h, w]).permute([1, 2, 0]);
+        let path = tmp_dir.join(format!("frame_{i:04}.pgm"));
+        if let Ok(mut f) = std::fs::File::create(&path) {
+            let _ = write!(f, "P6\n{w} {h}\n255\n");
+            let data = frame.reshape([h * w * 3]);
+            let bytes: Vec<u8> = (0..data.size()[0]).map(|j| data.double_value(&[j]) as u8).collect();
             let _ = f.write_all(&bytes);
         }
     }
 
-    let video = "output.mp4";
-    let ok = std::process::Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-framerate",
-            "8",
-            "-i",
-            &format!("{dir}/frame_%04d.pgm"),
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            video,
-        ])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    let filter = format!("scale=256:256:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse");
+    let status = std::process::Command::new("ffmpeg")
+        .args(["-y", "-framerate", "8", "-i", tmp_dir.join("frame_%04d.pgm").to_str().unwrap_or(""), "-vf", &filter, "-loop", "0", output.to_str().unwrap_or("")])
+        .status()
+        .map_err(|e| format!("ffmpeg: {e}"))?;
 
-    if ok {
-        eprintln!("output: {video}");
-    } else {
-        eprintln!("output: {dir}/ (frames only, ffmpeg unavailable)");
-    }
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    if status.success() { Ok(()) } else { Err("ffmpeg failed".to_string()) }
 }
