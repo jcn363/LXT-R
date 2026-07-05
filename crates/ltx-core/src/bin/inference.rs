@@ -3,7 +3,9 @@
 //! Usage:
 //!   ltx-inference --steps 4
 //!   ltx-inference --weights model.safetensors --steps 20
-//!   ltx-inference --weights model.safetensors --tokenizer tokenizer.model --text-weights text.safetensors --prompt "a sunset"
+//!   ltx-inference --weights model.safetensors --tokenizer tok.model --text-weights text.safetensors --prompt "a sunset"
+//!
+//! Memory-efficient: encodes prompt, frees text encoder, then loads transformer.
 
 use std::process;
 
@@ -20,25 +22,16 @@ use ltx_types::{Guider, Scheduler, STABILITY_EPS};
 use tch::nn::ModuleT;
 use tch::{Device, Kind, Tensor};
 
-enum TextEncoderState {
+enum TextEncoder {
     T5(T5TextEncoder),
     Gemma3(GemmaTextEncoder),
 }
 
-impl TextEncoderState {
-    fn from_gemma(enc: GemmaTextEncoder) -> Self { Self::Gemma3(enc) }
-
+impl TextEncoder {
     fn encode(&self, text: &str) -> Tensor {
         match self {
             Self::T5(enc) => enc.encode(text),
             Self::Gemma3(enc) => enc.encode(text),
-        }
-    }
-
-    fn hidden_size(&self) -> i64 {
-        match self {
-            Self::T5(enc) => enc.hidden_size(),
-            Self::Gemma3(enc) => enc.hidden_size(),
         }
     }
 }
@@ -57,6 +50,10 @@ struct Args {
     /// Path to text encoder .safetensors weights
     #[arg(long)]
     text_weights: Option<String>,
+
+    /// Device for transformer inference (cpu, cuda, cuda:0, cuda:1, ...)
+    #[arg(long, default_value = "cpu")]
+    device: String,
 
     /// Denoising steps
     #[arg(short, long, default_value_t = 20)]
@@ -83,6 +80,21 @@ struct Args {
     cfg: f64,
 }
 
+fn parse_device(s: &str) -> Device {
+    match s {
+        "cpu" => Device::Cpu,
+        s if s.starts_with("cuda:") => {
+            let id: usize = s.trim_start_matches("cuda:").parse().unwrap_or(0);
+            Device::Cuda(id)
+        }
+        "cuda" => Device::Cuda(0),
+        _ => {
+            eprintln!("warning: unknown device '{s}', falling back to CPU");
+            Device::Cpu
+        }
+    }
+}
+
 fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64) -> LTXModel {
     let mut blocks = Vec::new();
     for i in 0..num_layers {
@@ -100,8 +112,130 @@ fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64) ->
     LTXModel::new(blocks, norm_out, proj_out)
 }
 
+fn load_weights(vs: &tch::nn::VarStore, path: &str) -> Result<u32, String> {
+    let data = std::fs::read(path).map_err(|e| format!("read {path}: {e}"))?;
+    let st = safetensors::SafeTensors::deserialize(&data)
+        .map_err(|e| format!("deserialize {path}: {e}"))?;
+
+    let mut loaded_count = 0u32;
+    let mut skipped = 0u32;
+    let _no_grad = tch::no_grad_guard();
+    let mut vars = vs.variables();
+
+    for (name, tensor) in vars.iter_mut() {
+        let mut found = false;
+
+        // Try exact match
+        if let Ok(view) = st.tensor(name) {
+            let kind = match view.dtype() {
+                safetensors::Dtype::F16 => tch::Kind::Half,
+                safetensors::Dtype::BF16 => tch::Kind::BFloat16,
+                _ => tch::Kind::Float,
+            };
+            let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
+            let loaded = Tensor::from_data_size(view.data(), &shape, kind);
+            if tensor.size() == loaded.size() {
+                tensor.copy_(&loaded);
+                loaded_count += 1;
+                found = true;
+            }
+        }
+
+        // Try T5 format: var "block/0/..." → ckpt "encoder.block.0...."
+        if !found {
+            let ckpt_name = format!("encoder.{}", name.replace('/', "."));
+            if let Ok(view) = st.tensor(&ckpt_name) {
+                let kind = match view.dtype() {
+                    safetensors::Dtype::F16 => tch::Kind::Half,
+                    safetensors::Dtype::BF16 => tch::Kind::BFloat16,
+                    _ => tch::Kind::Float,
+                };
+                let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
+                let loaded = Tensor::from_data_size(view.data(), &shape, kind);
+                if tensor.size() == loaded.size() {
+                    tensor.copy_(&loaded);
+                    loaded_count += 1;
+                    found = true;
+                }
+            }
+        }
+
+        // Try dots format: var "block/0/..." → ckpt "block.0...."
+        if !found {
+            let ckpt_name = name.replace('/', ".");
+            if let Ok(view) = st.tensor(&ckpt_name) {
+                let kind = match view.dtype() {
+                    safetensors::Dtype::F16 => tch::Kind::Half,
+                    safetensors::Dtype::BF16 => tch::Kind::BFloat16,
+                    _ => tch::Kind::Float,
+                };
+                let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
+                let loaded = Tensor::from_data_size(view.data(), &shape, kind);
+                if tensor.size() == loaded.size() {
+                    tensor.copy_(&loaded);
+                    loaded_count += 1;
+                }
+            }
+        }
+
+        if !found {
+            skipped += 1;
+        }
+    }
+
+    eprintln!("  loaded {loaded_count}, skipped {skipped}");
+    Ok(loaded_count)
+}
+
+/// Phase 1: Load text encoder, encode prompt, return context tensor.
+/// The encoder VarStore is dropped after this function returns, freeing memory.
+fn encode_prompt(
+    tok_path: &str,
+    tw_path: &str,
+    prompt: &str,
+) -> Result<Tensor, String> {
+    eprintln!("loading text encoder...");
+    let data = std::fs::read(tw_path).map_err(|e| format!("read text weights: {e}"))?;
+    let is_t5 = safetensors::SafeTensors::deserialize(&data)
+        .map(|st| st.tensors().iter().any(|(k, _)| k.starts_with("encoder.block.")))
+        .unwrap_or(false);
+    drop(data);
+
+    let (encoder, hidden) = if is_t5 {
+        eprintln!("  T5 encoder detected");
+        let config = configurator::default_t5_config();
+        let vs = tch::nn::VarStore::new(Device::Cpu);
+        let enc = configurator::from_config_t5(&vs.root(), &config, tok_path, 512)
+            .map_err(|e| format!("T5 init: {e}"))?;
+        let h = enc.hidden_size();
+        load_weights(&vs, tw_path)?;
+        (TextEncoder::T5(enc), h)
+    } else {
+        eprintln!("  Gemma3 encoder detected");
+        let config = configurator::default_config();
+        let vs = tch::nn::VarStore::new(Device::Cpu);
+        let enc = configurator::from_config(&vs.root(), &config, tok_path)
+            .map_err(|e| format!("Gemma3 init: {e}"))?;
+        let h = enc.hidden_size();
+        load_weights(&vs, tw_path)?;
+        (TextEncoder::Gemma3(enc), h)
+    };
+
+    eprintln!("  encoding prompt ({hidden}d hidden)...");
+    let context = encoder.encode(prompt);
+    let seq_len = context.size()[1];
+    eprintln!("  context: [1, {seq_len}, {hidden}]");
+
+    // Encoder dropped here — VarStore and all 18GB freed
+    drop(encoder);
+    eprintln!("  text encoder freed");
+
+    Ok(context)
+}
+
 fn main() {
     let args = Args::parse();
+    let device = parse_device(&args.device);
 
     let (b, c) = (1i64, 4i64);
     let (p1, p2, p3) = (2i64, 4i64, 4i64);
@@ -111,7 +245,24 @@ fn main() {
     let num_layers = if use_random { 2 } else { 28 };
 
     tch::maybe_init_cuda();
-    let vs = tch::nn::VarStore::new(Device::Cpu);
+
+    // Phase 1: Encode prompt (loads + frees text encoder)
+    let context = if let (Some(tok), Some(tw)) = (&args.tokenizer, &args.text_weights) {
+        match encode_prompt(tok, tw, &args.prompt) {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                eprintln!("error: {e}");
+                process::exit(1);
+            }
+        }
+    } else {
+        eprintln!("no text encoder — using random context");
+        Tensor::randn([1, 4, dim], (Kind::Float, device))
+    };
+
+    // Phase 2: Build transformer on target device
+    eprintln!("loading transformer on {device:?}...");
+    let vs = tch::nn::VarStore::new(device);
     let model = build_model(&vs.root(), dim, patch_dim, num_layers);
 
     let patchify_proj = if !use_random {
@@ -126,95 +277,25 @@ fn main() {
     };
 
     if let Some(ref path) = args.weights {
-        if let Err(e) = load_weights(&vs, path) {
+        eprintln!("  loading transformer weights...");
+        let _count = load_weights(&vs, path).unwrap_or_else(|e| {
             eprintln!("error: {e}");
             process::exit(1);
-        }
+        });
     }
 
-    // Build text encoder if tokenizer + text weights provided
-    // Auto-detect T5 vs Gemma3 from checkpoint keys
-    let text_encoder_hidden = match (&args.tokenizer, &args.text_weights) {
-        (Some(tok_path), Some(tw_path)) => {
-            eprintln!("loading text encoder...");
-            let tw_path_str = tw_path.as_str();
-            // Detect T5 vs Gemma3 by checking if checkpoint has "encoder.block." keys
-            let is_t5 = {
-                let data = std::fs::read(tw_path).unwrap_or_default();
-                let is_t5 = if let Ok(st) = safetensors::SafeTensors::deserialize(&data) {
-                    st.tensors().iter().any(|(k, _)| k.starts_with("encoder.block."))
-                } else {
-                    false
-                };
-                is_t5
-            };
-
-            if is_t5 {
-                eprintln!("detected T5 text encoder");
-                let config = configurator::default_t5_config();
-                let encoder_vs = tch::nn::VarStore::new(Device::Cpu);
-                let encoder = match configurator::from_config_t5(&encoder_vs.root(), &config, tok_path, 512) {
-                    Ok(enc) => enc,
-                    Err(e) => {
-                        eprintln!("error: T5 encoder init failed: {e}");
-                        process::exit(1);
-                    }
-                };
-                if let Err(e) = load_weights(&encoder_vs, tw_path_str) {
-                    eprintln!("error: text weights: {e}");
-                    process::exit(1);
-                }
-                let hidden = encoder.hidden_size();
-                eprintln!("T5 encoder: {hidden} hidden");
-                // Store for context encoding
-                Some((encoder_vs, TextEncoderState::T5(encoder)))
-            } else {
-                eprintln!("detected Gemma3 text encoder");
-                let config = configurator::default_config();
-                let encoder_vs = tch::nn::VarStore::new(Device::Cpu);
-                let encoder = match configurator::from_config(&encoder_vs.root(), &config, tok_path) {
-                    Ok(enc) => enc,
-                    Err(e) => {
-                        eprintln!("error: text encoder init failed: {e}");
-                        process::exit(1);
-                    }
-                };
-                if let Err(e) = load_weights(&encoder_vs, tw_path_str) {
-                    eprintln!("error: text weights: {e}");
-                    process::exit(1);
-                }
-                let hidden = encoder.hidden_size();
-                eprintln!("Gemma3 encoder: {hidden} hidden");
-                Some((encoder_vs, TextEncoderState::from_gemma(encoder)))
-            }
-        }
-        (Some(_), None) => {
-            eprintln!("warning: --tokenizer requires --text-weights, ignoring tokenizer");
-            None
-        }
-        _ => None,
-    };
-
     let n_params: usize = vs.variables().values().map(|t| t.numel()).sum();
-    let text_dim = text_encoder_hidden.as_ref().map(|e| e.1.hidden_size()).unwrap_or(dim);
     eprintln!(
-        "init: {dim}d, {num_layers} layers, {:.1}M params, context_dim={text_dim}",
+        "ready: {dim}d, {num_layers} layers, {:.1}M params, device={device:?}",
         n_params as f64 / 1e6
     );
 
+    // Phase 3: Denoise
     tch::manual_seed(42);
-    let mut x = Tensor::randn([b, c, args.frames, args.height, args.width], (Kind::Float, Device::Cpu));
-
-    // Encode prompt to context
-    let context = if let Some((ref _encoder_vs, ref encoder)) = text_encoder_hidden {
-        let encoded = encoder.encode(&args.prompt);
-        // encoded: [1, seq_len, hidden_size] -> use as context
-        let seq_len = encoded.size()[1];
-        eprintln!("encoded prompt: [1, {seq_len}, {}]", encoded.size()[2]);
-        encoded
-    } else {
-        Tensor::randn([1, 4, dim], (Kind::Float, Device::Cpu))
-    };
+    let mut x = Tensor::randn(
+        [b, c, args.frames, args.height, args.width],
+        (Kind::Float, device),
+    );
 
     let scheduler = Ltx2Scheduler::default();
     let guider = CFG::new(args.cfg);
@@ -238,99 +319,39 @@ fn main() {
 
         let uncond_context = Tensor::zeros(
             [1, context.size()[1], context.size()[2]],
-            (Kind::Float, Device::Cpu),
+            (Kind::Float, device),
         );
         let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
 
         let guided = guider.guide(&cond_pred, &uncond_pred);
-        let denoised = unpatchify_5d(&guided, b, c, args.frames, args.height, args.width, p1, p2, p3);
+        let denoised = unpatchify_5d(
+            &guided,
+            b,
+            c,
+            args.frames,
+            args.height,
+            args.width,
+            p1,
+            p2,
+            p3,
+        );
         x = step.step(&x, sigma, next_sigma, &denoised, Kind::Float);
 
         let mean = x.mean(Kind::Float).double_value(&[]);
         let std = x.std(false).double_value(&[]);
-        eprintln!("  [{:>2}/{}] σ={:.4} μ={:.4} σ={:.4}", i + 1, args.steps, sigma, mean, std);
+        eprintln!(
+            "  [{:>2}/{}] σ={:.4} μ={:.4} σ={:.4}",
+            i + 1,
+            args.steps,
+            sigma,
+            mean,
+            std
+        );
     }
 
-    save_frames(&x, args.frames, args.height, args.width);
+    // Phase 4: Save output
+    save_frames(&x.to_device(Device::Cpu), args.frames, args.height, args.width);
     eprintln!("done");
-}
-
-fn load_weights(vs: &tch::nn::VarStore, path: &str) -> Result<(), String> {
-    let data = std::fs::read(path).map_err(|e| format!("read {path}: {e}"))?;
-    let st = safetensors::SafeTensors::deserialize(&data)
-        .map_err(|e| format!("deserialize {path}: {e}"))?;
-
-    let mut loaded_count = 0u32;
-    let mut skipped = 0u32;
-    let _no_grad = tch::no_grad_guard();
-    let mut vars = vs.variables();
-
-    for (name, tensor) in vars.iter_mut() {
-        // Try exact match first
-        let mut found = false;
-        if let Ok(view) = st.tensor(name) {
-            let kind = match view.dtype() {
-                safetensors::Dtype::F16 => tch::Kind::Half,
-                safetensors::Dtype::BF16 => tch::Kind::BFloat16,
-                _ => tch::Kind::Float,
-            };
-            let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
-            let loaded = Tensor::from_data_size(view.data(), &shape, kind);
-            if tensor.size() == loaded.size() {
-                tensor.copy_(&loaded);
-                loaded_count += 1;
-                found = true;
-            }
-        }
-
-        // If not found, try converting VarStore name to checkpoint format
-        // VarStore: "block/0/layer/0/SelfAttention/q/weight"
-        // Checkpoint: "encoder.block.0.layer.0.SelfAttention.q.weight"
-        if !found {
-            // Convert slashes to dots and prepend "encoder." for T5
-            let ckpt_name = format!("encoder.{}", name.replace('/', "."));
-            if let Ok(view) = st.tensor(&ckpt_name) {
-                let kind = match view.dtype() {
-                    safetensors::Dtype::F16 => tch::Kind::Half,
-                    safetensors::Dtype::BF16 => tch::Kind::BFloat16,
-                    _ => tch::Kind::Float,
-                };
-                let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
-                let loaded = Tensor::from_data_size(view.data(), &shape, kind);
-                if tensor.size() == loaded.size() {
-                    tensor.copy_(&loaded);
-                    loaded_count += 1;
-                    found = true;
-                }
-            }
-        }
-
-        // Also try without "encoder." prefix but with dots
-        if !found {
-            let ckpt_name = name.replace('/', ".");
-            if let Ok(view) = st.tensor(&ckpt_name) {
-                let kind = match view.dtype() {
-                    safetensors::Dtype::F16 => tch::Kind::Half,
-                    safetensors::Dtype::BF16 => tch::Kind::BFloat16,
-                    _ => tch::Kind::Float,
-                };
-                let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
-                let loaded = Tensor::from_data_size(view.data(), &shape, kind);
-                if tensor.size() == loaded.size() {
-                    tensor.copy_(&loaded);
-                    loaded_count += 1;
-                    found = true;
-                }
-            }
-        }
-
-        if !found {
-            skipped += 1;
-        }
-    }
-
-    eprintln!("weights: {loaded_count} loaded, {skipped} skipped");
-    Ok(())
 }
 
 fn save_frames(x: &Tensor, frames: i64, h: i64, w: i64) {
@@ -355,7 +376,10 @@ fn save_frames(x: &Tensor, frames: i64, h: i64, w: i64) {
 
     use std::io::Write;
     for i in 0..frames {
-        let frame = pixel.narrow(2, i, 1).reshape([3, h, w]).permute([1, 2, 0]);
+        let frame = pixel
+            .narrow(2, i, 1)
+            .reshape([3, h, w])
+            .permute([1, 2, 0]);
         let path = format!("{dir}/frame_{i:04}.pgm");
         if let Ok(mut f) = std::fs::File::create(&path) {
             let _ = write!(f, "P6\n{w} {h}\n255\n");
@@ -369,7 +393,18 @@ fn save_frames(x: &Tensor, frames: i64, h: i64, w: i64) {
 
     let video = "output.mp4";
     let ok = std::process::Command::new("ffmpeg")
-        .args(["-y", "-framerate", "8", "-i", &format!("{dir}/frame_%04d.pgm"), "-c:v", "libx264", "-pix_fmt", "yuv420p", video])
+        .args([
+            "-y",
+            "-framerate",
+            "8",
+            "-i",
+            &format!("{dir}/frame_%04d.pgm"),
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            video,
+        ])
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
