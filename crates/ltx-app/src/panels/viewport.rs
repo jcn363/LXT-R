@@ -56,7 +56,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
     // Center the frame
     ui.vertical_centered(|ui| {
         ui.add_space(8.0);
-        ui.image((texture_handle.id(), display_size));
+        ui.image((texture_handle.id(), display_size))
+            .on_hover_text(format!("Frame {} of {} ({}×{} pixels)", state.current_frame + 1, total, w, h));
     });
 
     // --- Toolbar ---
@@ -66,18 +67,22 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
     ui.horizontal(|ui| {
         // Play / Pause
         let play_icon = if state.playing { "⏸" } else { "▶" };
-        if ui.button(play_icon).clicked() {
+        if ui.button(play_icon)
+            .on_hover_text(if state.playing { "Pause playback" } else { "Play animation" })
+            .clicked()
+        {
             state.playing = !state.playing;
         }
 
         // Frame counter
-        ui.label(format!("{:>3} / {}", state.current_frame + 1, total));
+        ui.label(format!("{:>3} / {}", state.current_frame + 1, total))
+            .on_hover_text("Current frame / total frames");
 
         // Scrubber
         let scrubber = ui.add(
             egui::Slider::new(&mut state.current_frame, 0..=total.saturating_sub(1))
                 .show_value(false),
-        );
+        ).on_hover_text("Drag to scrub through frames (pauses playback)");
         if scrubber.changed() {
             state.playing = false;
         }
@@ -85,18 +90,19 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
         ui.separator();
 
         // FPS control
-        ui.label("FPS");
+        ui.label("FPS").on_hover_text("Playback frames per second");
         ui.add(
             egui::DragValue::new(&mut state.fps)
                 .range(1.0..=60.0)
                 .prefix(""),
-        );
+        ).on_hover_text("Adjust animation speed (1-60 fps)");
 
         // Speed indicator
-        ui.label(format!("{:.1}×", state.fps / 8.0));
+        ui.label(format!("{:.1}×", state.fps / 8.0))
+            .on_hover_text("Speed relative to 8fps default");
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("⬇ GIF").clicked() {
+            if ui.button("⬇ GIF").on_hover_text("Export as animated GIF (256×256)").clicked() {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("GIF", &["gif"])
                     .save_file()
@@ -116,7 +122,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
                     }
                 }
             }
-            if ui.button("⬇ Video").clicked() {
+            if ui.button("⬇ Video").on_hover_text("Export as MP4 video (H.264)").clicked() {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("MP4", &["mp4"])
                     .save_file()
@@ -134,7 +140,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
                     }
                 }
             }
-            if ui.button("⬇ PNGs").clicked() {
+            if ui.button("⬇ PNGs").on_hover_text("Export as individual PNG files").clicked() {
                 if let Some(dir) = rfd::FileDialog::new().set_title("Save frames").pick_folder() {
                     if let Err(e) = crate::export::save_frames_png(
                         &state.frames_display,
