@@ -52,10 +52,10 @@ cargo run --release --bin ltx-inference -- \
   --prompt "a sunset over mountains" \
   --steps 20
 
-# Real weights on GPU
+# Real weights on GPU (auto-detects CUDA/MPS/CPU)
 cargo run --release --bin ltx-inference -- \
   --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
-  --device cuda \
+  --device auto \
   --steps 20
 
 # Custom resolution
@@ -141,7 +141,7 @@ python3 scripts/convert_ltx_weights.py \
 | `--weights` | none | Transformer .safetensors (omit for random init) |
 | `--tokenizer` | none | SentencePiece tokenizer model |
 | `--text-weights` | none | Text encoder .safetensors (T5 or Gemma3) |
-| `--device` | `cpu` | Inference device (`cpu`, `cuda`, `cuda:N`) |
+| `--device` | `auto` | Inference device (`auto`, `cpu`, `cuda`, `cuda:N`, `mps`) |
 | `--steps` | `20` | Denoising steps |
 | `--prompt` | `"a colorful abstract pattern"` | Text prompt |
 | `--prompts-file` | none | Text file with prompts (one per line) for batch mode |
@@ -160,9 +160,34 @@ python3 scripts/convert_ltx_weights.py \
 
 ## GPU Inference
 
-The transformer can run on GPU for faster denoising. By default, the downloaded libtorch is CPU-only. For GPU support:
+The transformer can run on GPU for faster denoising. The `--device` flag controls which backend is used, and defaults to `auto` for hands-free detection.
 
-### Option 1: Download CUDA libtorch (recommended)
+### Supported Backends
+
+| Backend | `--device` value | Status | Requirements |
+|---------|------------------|--------|--------------|
+| NVIDIA CUDA | `cuda` / `cuda:N` | **Fully supported** | CUDA 12.1+ toolkit, NVIDIA GPU |
+| Apple Metal (MPS) | `mps` | **Fully supported** | macOS 13+, Apple Silicon or AMD GPU |
+| CPU fallback | `cpu` | Always available | — |
+
+### Auto-Detection (`--device auto`)
+
+When `--device auto` is specified (the default), the runtime probes backends in priority order:
+
+1. **CUDA** — checks `tch::Cuda::is_available()`
+2. **MPS** — checks `tch::utils::has_mps()` (macOS only)
+3. **CPU** — used when no GPU accelerator is found
+
+The chosen backend is printed at startup:
+```
+auto-detected: NVIDIA CUDA (gpu 0)
+auto-detected: Apple Metal Performance Shaders
+no GPU accelerator detected, using CPU
+```
+
+### CUDA Setup
+
+**Option 1: Download CUDA libtorch (recommended)**
 
 ```bash
 # Download CUDA 12.1 libtorch
@@ -172,27 +197,41 @@ unzip libtorch-cxx11-abi-shared-with-deps-2.3.0+cu121.zip -d /opt/libtorch
 # Set environment variables
 export LIBTORCH=/opt/libtorch
 export LD_LIBRARY_PATH=/opt/libtorch/lib:$LD_LIBRARY_PATH
-
-# Run on GPU
-cargo run --release --bin ltx-inference -- --weights weights/ltx-video-2b-v0.9.1-rust.safetensors --device cuda --steps 20
 ```
 
-### Option 2: Use system CUDA toolkit
+**Option 2: Use system CUDA toolkit**
 
 ```bash
-# If CUDA is installed at /usr/local/cuda
 export LIBTORCH=/usr/local/cuda
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-
-cargo run --release --bin ltx-inference -- --device cuda --steps 20
 ```
 
-### GPU Detection
+**Verify CUDA detection:**
+```bash
+nvidia-smi          # confirm GPU is visible
+nvcc --version      # confirm CUDA toolkit
+```
 
-The CLI auto-detects CUDA availability:
-- `--device cuda` — uses GPU 0, falls back to CPU if CUDA unavailable
-- `--device cuda:1` — uses GPU 1
-- `--device cpu` — always uses CPU
+### macOS Metal Setup
+
+No extra setup is required — `tch` ships with Metal support when built on macOS. Just run:
+
+```bash
+cargo run --release --bin ltx-inference -- --device mps --steps 20
+```
+
+### Multi-GPU Selection
+
+```bash
+# Use GPU 0 (default)
+--device cuda
+
+# Use GPU 1
+--device cuda:1
+
+# Auto-detect picks the first available GPU
+--device auto
+```
 
 ### GPU Requirements
 
@@ -201,6 +240,19 @@ The CLI auto-detects CUDA availability:
 | Transformer (2B) | ~6 GB | ~6 GB |
 | T5 text encoder (XXL) | ~9 GB (mmap) | ~9 GB |
 | Both combined | ~15 GB | ~15 GB |
+
+### Future Backends
+
+The following backends are **not yet supported** by the `tch` (libtorch) bindings used by this project. Integrating them would require switching to or adding alternative compute backends:
+
+| Backend | Notes |
+|---------|-------|
+| **ROCm** (AMD) | Supported by libtorch on Linux; requires ROCm-enabled libtorch build. Set `LIBTORCH` to a ROCm build to enable. |
+| **Vulkan** | Not supported by `tch`. Would require a Vulkan compute crate (e.g., `ash`, `gpu-allocator`). |
+| **WebGPU** | Not supported by `tch`. Would require targeting WASM with `wgpu` or similar. |
+| **Intel oneAPI** | Not supported by `tch`. Would require oneAPI SYCL runtime integration. |
+
+Contributions to add these backends are welcome. See `PLAN.md` for architectural guidance.
 
 ## SSOT Enforcement
 
@@ -265,7 +317,7 @@ crates/
 - 28-layer transformer runs with real weights
 - T5 text encoder with mmap + FP16 loading (memory-efficient)
 - Prompt conditioning via T5 cross-attention (4096-dim context)
-- GPU support via `--device cuda` flag
+- GPU support via `--device auto` (CUDA, MPS auto-detection) or explicit `cuda`/`mps`/`cpu`
 - eframe GUI with video playback toolbar and export (PNG/MP4/GIF)
 - CLI with full argument support
 

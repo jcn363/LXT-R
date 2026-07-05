@@ -52,8 +52,13 @@ struct Args {
     #[arg(long)]
     text_weights: Option<String>,
 
-    /// Device for transformer inference (cpu, cuda, cuda:0, cuda:1, ...)
-    #[arg(long, default_value = "cpu")]
+    /// Inference device. Options:
+    ///   auto    — detect best available (CUDA > MPS > CPU)
+    ///   cpu     — force CPU
+    ///   cuda    — NVIDIA GPU 0 (falls back to CPU if unavailable)
+    ///   cuda:N  — NVIDIA GPU N
+    ///   mps     — Apple Metal Performance Shaders (macOS only)
+    #[arg(long, default_value = "auto")]
     device: String,
 
     /// Denoising steps
@@ -91,30 +96,62 @@ struct Args {
 
 fn parse_device(s: &str) -> Device {
     match s {
+        "auto" => detect_device(),
         "cpu" => Device::Cpu,
+        "cuda" => pick_cuda(0),
         s if s.starts_with("cuda:") => {
-            let id: usize = s.trim_start_matches("cuda:").parse().unwrap_or(0);
-            let device = Device::Cuda(id);
-            if !tch::Cuda::is_available() {
-                eprintln!("warning: CUDA not available, falling back to CPU");
-                Device::Cpu
-            } else {
-                device
-            }
+            let id: usize = s["cuda:".len()..].parse().unwrap_or(0);
+            pick_cuda(id)
         }
-        "cuda" => {
-            if tch::Cuda::is_available() {
-                Device::Cuda(0)
-            } else {
-                eprintln!("warning: CUDA not available, falling back to CPU");
-                Device::Cpu
-            }
-        }
-        _ => {
-            eprintln!("warning: unknown device '{s}', falling back to CPU");
+        "mps" => pick_mps(),
+        other => {
+            eprintln!("warning: unknown device '{other}', falling back to CPU");
             Device::Cpu
         }
     }
+}
+
+/// Probe backends in priority order: CUDA → MPS → CPU.
+fn detect_device() -> Device {
+    if tch::Cuda::is_available() {
+        eprintln!("auto-detected: NVIDIA CUDA (gpu 0)");
+        return Device::Cuda(0);
+    }
+    if is_mps_available() {
+        eprintln!("auto-detected: Apple Metal Performance Shaders");
+        return Device::Mps;
+    }
+    eprintln!("no GPU accelerator detected, using CPU");
+    Device::Cpu
+}
+
+fn pick_cuda(id: usize) -> Device {
+    if !tch::Cuda::is_available() {
+        eprintln!("warning: CUDA not available, falling back to CPU");
+        return Device::Cpu;
+    }
+    let n = tch::Cuda::device_count() as usize;
+    if id >= n {
+        eprintln!("warning: cuda:{id} requested but only {n} device(s) available, using gpu 0");
+        return Device::Cuda(0);
+    }
+    Device::Cuda(id)
+}
+
+fn pick_mps() -> Device {
+    if is_mps_available() {
+        Device::Mps
+    } else {
+        eprintln!("warning: MPS not available (requires macOS with Metal support), falling back to CPU");
+        Device::Cpu
+    }
+}
+
+/// MPS is available when tch is built with the Metal backend on macOS.
+fn is_mps_available() -> bool {
+    // On non-macOS builds the Device::Mps variant exists but is never available.
+    // tch 0.16 exposes mps_is_available() when compiled with Metal support.
+    cfg!(target_os = "macos") && tch::utils::has_mps()
 }
 
 fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64, context_dim: Option<i64>) -> LTXModel {
