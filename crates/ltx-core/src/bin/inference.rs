@@ -295,16 +295,24 @@ fn main() {
     eprintln!("ready: {dim}d, {num_layers} layers, {:.1}M params", n_params as f64 / 1e6);
 
     // Phase 2: Process each prompt
+    let total = prompts.len();
+    let mut completed = 0u32;
+    let mut failed = 0u32;
+
     for (idx, prompt) in prompts.iter().enumerate() {
-        let prompt_label = if batch_mode { format!("[{}/{}] ", idx + 1, prompts.len()) } else { String::new() };
+        let pct = (idx as f64 / total as f64 * 100.0) as u32;
+        let prompt_label = if batch_mode { format!("[{}/{} {}%] ", idx + 1, total, pct) } else { String::new() };
+
+        eprintln!("\n{prompt_label}\"{prompt}\"");
 
         // Encode prompt (loads + frees text encoder each time in batch mode)
         let context = if let (Some(tok), Some(tw)) = (&args.tokenizer, &args.text_weights) {
-            eprintln!("{prompt_label}encoding prompt: \"{prompt}\"");
+            eprintln!("{prompt_label}encoding prompt...");
             match encode_prompt(tok, tw, prompt) {
                 Ok(ctx) => ctx,
                 Err(e) => {
                     eprintln!("{prompt_label}error: {e}");
+                    failed += 1;
                     continue;
                 }
             }
@@ -381,9 +389,21 @@ fn main() {
         } else {
             eprintln!("{prompt_label}  saved: {}", gif_path.display());
         }
+
+        completed += 1;
+        if batch_mode {
+            let bar_len = 30;
+            let filled = (idx as f64 / total as f64 * bar_len as f64) as usize;
+            let bar: String = "█".repeat(filled) + &"░".repeat(bar_len - filled);
+            eprintln!("progress: [{bar}] {}/{}", idx + 1, total);
+        }
     }
 
-    eprintln!("done");
+    if batch_mode {
+        eprintln!("\nbatch complete: {completed} succeeded, {failed} failed out of {total}");
+    } else {
+        eprintln!("done");
+    }
 }
 
 fn save_frames(x: &Tensor, dir: &std::path::Path, frames: i64, h: i64, w: i64) {
