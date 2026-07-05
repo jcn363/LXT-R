@@ -4,7 +4,7 @@ use tch::nn::{Linear, ModuleT, Path};
 use tch::Tensor;
 
 use ltx_attention::{
-    precompute_freqs_cis, scaled_dot_product_attention, RopeType,
+    apply_rotary_emb, precompute_freqs_cis, scaled_dot_product_attention, RopeType,
 };
 use ltx_norm::RMSNorm;
 
@@ -104,7 +104,7 @@ impl Gemma3Attention {
         }
     }
 
-    fn forward(&self, x: &Tensor, _cos: &Tensor, _sin: &Tensor) -> Tensor {
+    fn forward(&self, x: &Tensor, cos: &Tensor, sin: &Tensor) -> Tensor {
         let b = x.size()[0];
         let seq_len = x.size()[1];
 
@@ -117,13 +117,17 @@ impl Gemma3Attention {
         let k = k.reshape([b, seq_len, self.num_kv_heads, self.head_dim]);
 
         // Apply QK norms per-head (norm weight is head_dim-sized)
-        let q = q.reshape([b * seq_len * self.num_heads, self.head_dim]);
-        let q = self.q_norm.forward(&q).reshape([b, seq_len, self.num_heads, self.head_dim]);
-        let k = k.reshape([b * seq_len * self.num_kv_heads, self.head_dim]);
-        let k = self.k_norm.forward(&k).reshape([b, seq_len, self.num_kv_heads, self.head_dim]);
+        let q_flat = q.reshape([b * seq_len * self.num_heads, self.head_dim]);
+        let q = self.q_norm.forward(&q_flat).reshape([b, seq_len, self.num_heads, self.head_dim]);
+        let k_flat = k.reshape([b * seq_len * self.num_kv_heads, self.head_dim]);
+        let k = self.k_norm.forward(&k_flat).reshape([b, seq_len, self.num_kv_heads, self.head_dim]);
 
-        // TODO: RoPE shape broadcasting needs fixing — skip for now
-        let (q_rot, k_rot) = (q, k);
+        // RoPE: precompute_freqs_cis returns [S, d] but apply_rotary_emb
+        // needs cos/sin to broadcast with [B, S, n, head_dim].
+        // Unsqueeze to [1, S, 1, d] for correct broadcasting.
+        let cos = cos.unsqueeze(0).unsqueeze(2);
+        let sin = sin.unsqueeze(0).unsqueeze(2);
+        let (q_rot, k_rot) = apply_rotary_emb(&q, &k, &cos, &sin, RopeType::Split);
 
         let q = q_rot.transpose(1, 2);
         let k = k_rot.transpose(1, 2);
