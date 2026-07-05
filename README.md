@@ -73,11 +73,31 @@ cargo run --release --bin ltx-inference -- \
   --output-dir batch_output \
   --steps 10
 
+# Resume interrupted batch (skip completed prompts)
+cargo run --release --bin ltx-inference -- \
+  --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
+  --tokenizer weights/tokenizer/spiece.model \
+  --text-weights weights/text_encoder.safetensors \
+  --prompts-file prompts.txt \
+  --output-dir batch_output \
+  --steps 10 \
+  --resume
+
+# With custom seed for reproducibility
+cargo run --release --bin ltx-inference -- \
+  --prompts-file prompts.txt \
+  --seed 123 \
+  --steps 10
+
 # Output structure:
 # batch_output/
-# ├── 0001/  (frames + gif for prompt 1)
-# ├── 0002/  (frames + gif for prompt 2)
-# └── 0003/  (frames + gif for prompt 3)
+# ├── manifest.json    (results summary: prompts, timings, settings)
+# ├── 0001/            (frames + gif for prompt 1)
+# ├── 0001.gif
+# ├── 0002/            (frames + gif for prompt 2)
+# ├── 0002.gif
+# └── 0003/            (frames + gif for prompt 3)
+# └── 0003.gif
 ```
 
 ### Generate GIF
@@ -146,6 +166,8 @@ python3 scripts/convert_ltx_weights.py \
 | `--prompt` | `"a colorful abstract pattern"` | Text prompt |
 | `--prompts-file` | none | Text file with prompts (one per line) for batch mode |
 | `--output-dir` | `batch_output` | Output directory for batch results |
+| `--seed` | `42` | Random seed for reproducibility |
+| `--resume` | off | Skip prompts whose output directory already exists |
 | `--height` | `16` | Latent height |
 | `--width` | `16` | Latent width |
 | `--frames` | `4` | Number of frames |
@@ -318,6 +340,7 @@ crates/
 - T5 text encoder with mmap + FP16 loading (memory-efficient)
 - Prompt conditioning via T5 cross-attention (4096-dim context)
 - GPU support via `--device auto` (CUDA, MPS auto-detection) or explicit `cuda`/`mps`/`cpu`
+- Batch processing: `--prompts-file` with upfront encoding, `--resume`, `--seed`, manifest.json
 - eframe GUI with video playback toolbar and export (PNG/MP4/GIF)
 - CLI with full argument support
 

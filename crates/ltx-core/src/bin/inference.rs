@@ -92,6 +92,14 @@ struct Args {
     /// Output directory for batch results (default: "batch_output")
     #[arg(long, default_value = "batch_output")]
     output_dir: String,
+
+    /// Random seed for reproducibility (default: 42)
+    #[arg(long, default_value_t = 42)]
+    seed: i64,
+
+    /// Skip prompts whose output directory already exists
+    #[arg(long)]
+    resume: bool,
 }
 
 fn parse_device(s: &str) -> Device {
@@ -344,35 +352,75 @@ fn main() {
     let n_params: usize = vs.variables().values().map(|t| t.numel()).sum();
     eprintln!("ready: {dim}d, {num_layers} layers, {:.1}M params", n_params as f64 / 1e6);
 
-    // Phase 2: Process each prompt
+    // Phase 2: Pre-encode all prompts (load text encoder once, encode, free)
+    let has_encoder = args.tokenizer.is_some() && args.text_weights.is_some();
+    let contexts: Vec<Tensor> = if has_encoder {
+        let tok = args.tokenizer.as_ref().unwrap();
+        let tw = args.text_weights.as_ref().unwrap();
+        eprintln!("encoding {} prompt(s) upfront...", prompts.len());
+        let t0 = std::time::Instant::now();
+        let mut ctxs = Vec::with_capacity(prompts.len());
+        for (i, prompt) in prompts.iter().enumerate() {
+            match encode_prompt(tok, tw, prompt) {
+                Ok(ctx) => {
+                    if batch_mode {
+                        eprintln!("  [{}/{}] encoded (seq_len={})", i + 1, prompts.len(), ctx.size()[1]);
+                    }
+                    ctxs.push(ctx);
+                }
+                Err(e) => {
+                    eprintln!("  [{}/{}] encoding failed: {e}", i + 1, prompts.len());
+                    // Placeholder context — will be skipped during denoising
+                    ctxs.push(Tensor::zeros([1, 1, dim], (Kind::Float, Device::Cpu)));
+                }
+            }
+        }
+        let elapsed = t0.elapsed().as_secs_f64();
+        eprintln!("encoding complete in {elapsed:.1}s");
+        ctxs
+    } else {
+        eprintln!("no text encoder — using random contexts");
+        prompts.iter().map(|_| Tensor::randn([1, 4, dim], (Kind::Float, device))).collect()
+    };
+
+    // Phase 3: Denoise each prompt
     let total = prompts.len();
     let mut completed = 0u32;
     let mut failed = 0u32;
+    let mut timings: Vec<f64> = Vec::with_capacity(total);
 
     for (idx, prompt) in prompts.iter().enumerate() {
-        let pct = (idx as f64 / total as f64 * 100.0) as u32;
-        let prompt_label = if batch_mode { format!("[{}/{} {}%] ", idx + 1, total, pct) } else { String::new() };
+        let prompt_label = if batch_mode { format!("[{}/{}] ", idx + 1, total) } else { String::new() };
+
+        // Skip if resuming and output already exists
+        if args.resume {
+            let skip_dir = if batch_mode {
+                std::path::PathBuf::from(&args.output_dir).join(format!("{:04}", idx + 1))
+            } else {
+                std::path::PathBuf::from("output_frames")
+            };
+            if skip_dir.exists() {
+                eprintln!("{prompt_label}\"{prompt}\" — skipped (output exists)");
+                completed += 1;
+                timings.push(0.0);
+                continue;
+            }
+        }
 
         eprintln!("\n{prompt_label}\"{prompt}\"");
 
-        // Encode prompt (loads + frees text encoder each time in batch mode)
-        let context = if let (Some(tok), Some(tw)) = (&args.tokenizer, &args.text_weights) {
-            eprintln!("{prompt_label}encoding prompt...");
-            match encode_prompt(tok, tw, prompt) {
-                Ok(ctx) => ctx,
-                Err(e) => {
-                    eprintln!("{prompt_label}error: {e}");
-                    failed += 1;
-                    continue;
-                }
-            }
-        } else {
-            eprintln!("{prompt_label}no text encoder — using random context");
-            Tensor::randn([1, 4, dim], (Kind::Float, device))
-        };
+        let context = &contexts[idx];
+
+        // Detect failed encodings (zero-filled placeholder)
+        if context.size()[1] == 1 && context.size()[2] == dim && has_encoder {
+            eprintln!("{prompt_label}skipping — encoding failed");
+            failed += 1;
+            timings.push(0.0);
+            continue;
+        }
 
         // Update model context_dim if text encoder was used
-        let context_dim = if context.size()[2] != dim as i64 {
+        let context_dim = if context.size()[2] != dim {
             Some(context.size()[2])
         } else {
             None
@@ -384,7 +432,7 @@ fn main() {
         };
 
         // Denoise
-        tch::manual_seed(42);
+        tch::manual_seed(args.seed);
         let mut x = Tensor::randn([b, c, args.frames, args.height, args.width], (Kind::Float, device));
 
         let scheduler = Ltx2Scheduler::default();
@@ -392,7 +440,8 @@ fn main() {
         let step = EulerStep::new();
         let sigmas = scheduler.sigmas(args.steps);
 
-        eprintln!("{prompt_label}denoising: {} steps, cfg={}", args.steps, args.cfg);
+        let t0 = std::time::Instant::now();
+        eprintln!("{prompt_label}denoising: {} steps, cfg={}, seed={}", args.steps, args.cfg, args.seed);
         for i in 0..args.steps {
             let sigma = sigmas[i];
             let next_sigma = sigmas[i + 1];
@@ -405,7 +454,7 @@ fn main() {
             };
 
             let timestep = Tensor::from_slice(&[sigma as f32]);
-            let cond_pred = model.forward(&projected, &timestep, &context, None, None);
+            let cond_pred = model.forward(&projected, &timestep, context, None, None);
 
             let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
             let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
@@ -416,8 +465,10 @@ fn main() {
 
             let mean = x.mean(Kind::Float).double_value(&[]);
             let s = x.std(false).double_value(&[]);
-            eprintln!("{prompt_label}  [{:>2}/{}] σ={:.4} μ={:.4} σ={:.4}", i + 1, args.steps, sigma, mean, s);
+            eprintln!("{prompt_label}  [{:>2}/{}] sigma={:.4} mean={:.4} std={:.4}", i + 1, args.steps, sigma, mean, s);
         }
+        let elapsed = t0.elapsed().as_secs_f64();
+        timings.push(elapsed);
 
         // Save output
         let out_dir = if batch_mode {
@@ -441,16 +492,26 @@ fn main() {
         }
 
         completed += 1;
+        eprintln!("{prompt_label}  {elapsed:.1}s");
+
         if batch_mode {
             let bar_len = 30;
-            let filled = (idx as f64 / total as f64 * bar_len as f64) as usize;
+            let filled = ((idx + 1) as f64 / total as f64 * bar_len as f64) as usize;
             let bar: String = "█".repeat(filled) + &"░".repeat(bar_len - filled);
             eprintln!("progress: [{bar}] {}/{}", idx + 1, total);
         }
     }
 
+    // Summary
     if batch_mode {
+        let total_time: f64 = timings.iter().sum();
+        let active: Vec<f64> = timings.iter().copied().filter(|t| *t > 0.0).collect();
+        let avg = if active.is_empty() { 0.0 } else { active.iter().sum::<f64>() / active.len() as f64 };
         eprintln!("\nbatch complete: {completed} succeeded, {failed} failed out of {total}");
+        eprintln!("total time: {total_time:.1}s, avg per prompt: {avg:.1}s");
+
+        // Write manifest.json
+        let _ = write_manifest(&args.output_dir, &prompts, &timings, args.steps, args.cfg, args.seed);
     } else {
         eprintln!("done");
     }
@@ -526,4 +587,30 @@ fn save_gif(x: &Tensor, frames: i64, h: i64, w: i64, output: &std::path::Path) -
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
     if status.success() { Ok(()) } else { Err("ffmpeg failed".to_string()) }
+}
+
+fn write_manifest(
+    output_dir: &str,
+    prompts: &[String],
+    timings: &[f64],
+    steps: usize,
+    cfg: f64,
+    seed: i64,
+) -> Result<(), String> {
+    let path = std::path::PathBuf::from(output_dir).join("manifest.json");
+    let total_time: f64 = timings.iter().sum();
+    let mut entries = Vec::new();
+    for (i, (prompt, time)) in prompts.iter().zip(timings.iter()).enumerate() {
+        entries.push(format!(
+            r#"  {{ "index": {}, "prompt": {:?}, "output": "{:04}/", "time_s": {:.1} }}"#,
+            i + 1, prompt, i + 1, time
+        ));
+    }
+    let json = format!(
+        "{{\n  \"steps\": {}, \"cfg\": {}, \"seed\": {}, \"total_time_s\": {:.1},\n  \"results\": [\n{}\n  ]\n}}",
+        steps, cfg, seed, total_time, entries.join(",\n")
+    );
+    std::fs::write(&path, &json).map_err(|e| format!("write {}: {e}", path.display()))?;
+    eprintln!("manifest: {}", path.display());
+    Ok(())
 }
