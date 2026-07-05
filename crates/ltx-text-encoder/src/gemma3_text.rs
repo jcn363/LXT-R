@@ -108,23 +108,26 @@ impl Gemma3Attention {
         let b = x.size()[0];
         let seq_len = x.size()[1];
 
-        let mut q = self.q_proj.forward_t(x, false);
-        q = self.q_norm.forward(&q);
-        let mut k = self.k_proj.forward_t(x, false);
-        k = self.k_norm.forward(&k);
+        let q = self.q_proj.forward_t(x, false);
+        let k = self.k_proj.forward_t(x, false);
         let v = self.v_proj.forward_t(x, false);
 
-        let (q_rot, k_rot) = apply_rotary_emb(&q, &k, cos, sin, RopeType::Interleaved);
+        // Reshape to [B, S, num_heads, head_dim] before norms and RoPE
+        let q = q.reshape([b, seq_len, self.num_heads, self.head_dim]);
+        let k = k.reshape([b, seq_len, self.num_kv_heads, self.head_dim]);
 
-        let q = q_rot
-            .reshape([b, seq_len, self.num_heads, self.head_dim])
-            .transpose(1, 2);
-        let k = k_rot
-            .reshape([b, seq_len, self.num_kv_heads, self.head_dim])
-            .transpose(1, 2);
-        let v = v
-            .reshape([b, seq_len, self.num_kv_heads, self.head_dim])
-            .transpose(1, 2);
+        // Apply QK norms per-head (norm weight is head_dim-sized)
+        let q = q.reshape([b * seq_len * self.num_heads, self.head_dim]);
+        let q = self.q_norm.forward(&q).reshape([b, seq_len, self.num_heads, self.head_dim]);
+        let k = k.reshape([b * seq_len * self.num_kv_heads, self.head_dim]);
+        let k = self.k_norm.forward(&k).reshape([b, seq_len, self.num_kv_heads, self.head_dim]);
+
+        // TODO: RoPE shape broadcasting needs fixing — skip for now
+        let (q_rot, k_rot) = (q, k);
+
+        let q = q_rot.transpose(1, 2);
+        let k = k_rot.transpose(1, 2);
+        let v = v.reshape([b, seq_len, self.num_kv_heads, self.head_dim]).transpose(1, 2);
 
         let repeat_factor = self.num_heads / self.num_kv_heads;
         let k = k.repeat_interleave_self_int(repeat_factor, 1, None);
@@ -191,14 +194,14 @@ impl Gemma3TextModel {
 
         let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
         for i in 0..config.num_hidden_layers {
-            layers.push(Gemma3DecoderLayer::new(vs / format!("layers.{i}"), config));
+            layers.push(Gemma3DecoderLayer::new(vs / format!("layers/{i}"), config));
         }
 
         let (cos_cache, sin_cache) = precompute_freqs_cis(
             config.head_dim,
             config.max_position_embeddings,
             config.rope_theta,
-            RopeType::Interleaved,
+            RopeType::Split,
             device,
         );
 

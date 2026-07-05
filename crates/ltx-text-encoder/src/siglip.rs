@@ -151,7 +151,7 @@ impl SigLIPVisionTower {
 
         let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
         for i in 0..config.num_hidden_layers {
-            layers.push(SigLIPVisionBlock::new(vs / format!("encoder.layers.{i}"), config));
+            layers.push(SigLIPVisionBlock::new(vs / format!("encoder/layers/{i}"), config));
         }
 
         Self {
