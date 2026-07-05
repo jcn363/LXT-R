@@ -12,3 +12,5 @@ output_frame.pgm
 output_video.mp4
 weights/
 weights_rust*.safetensors
+output.mp4
+output_frames/
