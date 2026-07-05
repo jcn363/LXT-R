@@ -62,6 +62,22 @@ cargo run --release --bin ltx-inference -- \
 cargo run --release --bin ltx-inference -- \
   --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
   --steps 8 --height 32 --width 32 --frames 8
+
+# Batch processing — multiple prompts from file
+printf "a sunset over mountains\na cat walking on grass\na dog running\n" > prompts.txt
+cargo run --release --bin ltx-inference -- \
+  --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
+  --tokenizer weights/tokenizer/spiece.model \
+  --text-weights weights/text_encoder.safetensors \
+  --prompts-file prompts.txt \
+  --output-dir batch_output \
+  --steps 10
+
+# Output structure:
+# batch_output/
+# ├── 0001/  (frames + gif for prompt 1)
+# ├── 0002/  (frames + gif for prompt 2)
+# └── 0003/  (frames + gif for prompt 3)
 ```
 
 ### Generate GIF
@@ -86,7 +102,8 @@ The GUI provides:
 - Text encoder weights picker (T5 or Gemma3)
 - Resolution, steps, CFG, scheduler, device controls
 - Live preview with play/pause and frame scrubber
-- Export: PNGs, MP4, or GIF
+- Export: PNGs, MP4, or GIF (via toolbar buttons)
+- Help tooltips on all controls (hover for descriptions)
 
 ### Run Tests
 
@@ -127,6 +144,8 @@ python3 scripts/convert_ltx_weights.py \
 | `--device` | `cpu` | Inference device (`cpu`, `cuda`, `cuda:N`) |
 | `--steps` | `20` | Denoising steps |
 | `--prompt` | `"a colorful abstract pattern"` | Text prompt |
+| `--prompts-file` | none | Text file with prompts (one per line) for batch mode |
+| `--output-dir` | `batch_output` | Output directory for batch results |
 | `--height` | `16` | Latent height |
 | `--width` | `16` | Latent width |
 | `--frames` | `4` | Number of frames |
