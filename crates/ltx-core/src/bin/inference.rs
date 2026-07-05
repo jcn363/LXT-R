@@ -11,7 +11,7 @@ use std::process;
 
 use clap::Parser;
 use ltx_attention::RopeType;
-use ltx_components::{EulerStep, Ltx2Scheduler, CFG};
+use ltx_components::{EulerStep, GaussianNoiser, Ltx2Scheduler, CFG};
 use ltx_norm::RMSNorm;
 use ltx_patchify::{patchify_5d, unpatchify_5d};
 use ltx_text_encoder::configurator;
@@ -100,6 +100,16 @@ struct Args {
     /// Skip prompts whose output directory already exists
     #[arg(long)]
     resume: bool,
+
+    /// Path to input image for img2img mode. The image is encoded to latent
+    /// space and denoised with --strength controlling preservation.
+    #[arg(long)]
+    init_image: Option<String>,
+
+    /// Denoising strength for img2img (0.0 = keep original, 1.0 = full txt2img).
+    /// Only used when --init-image is provided.
+    #[arg(long, default_value_t = 0.75)]
+    strength: f64,
 }
 
 fn parse_device(s: &str) -> Device {
@@ -160,6 +170,49 @@ fn is_mps_available() -> bool {
     // On non-macOS builds the Device::Mps variant exists but is never available.
     // tch 0.16 exposes mps_is_available() when compiled with Metal support.
     cfg!(target_os = "macos") && tch::utils::has_mps()
+}
+
+/// Load an image file and convert to a 5D latent tensor: (1, 4, T, H, W).
+///
+/// The image is resized to (width, height), normalized to [-1, 1], and its 3
+/// RGB channels are projected to 4 latent channels by padding the 4th with
+/// zeros.  The single frame is replicated across all T time steps.
+fn load_init_image(
+    path: &str,
+    frames: i64,
+    height: i64,
+    width: i64,
+    device: Device,
+) -> Result<Tensor, String> {
+    let img = image::open(path).map_err(|e| format!("open {path}: {e}"))?;
+    let img = img.resize_exact(
+        width as u32,
+        height as u32,
+        image::imageops::FilterType::Lanczos3,
+    );
+    let rgb = img.to_rgb8();
+    let raw = rgb.into_raw();
+    let pixels: Vec<f32> = raw.iter().map(|&b| (b as f32 / 127.5) - 1.0).collect();
+
+    // (H, W, 3) → (1, 3, 1, H, W)
+    let t = Tensor::from_slice(&pixels)
+        .reshape([height, width, 3])
+        .permute([2, 0, 1]) // (3, H, W)
+        .unsqueeze(0) // (3, H, W) -> (1, 3, H, W)
+        .unsqueeze(2) // (1, 3, H, W) -> (1, 3, 1, H, W)
+        .to_kind(Kind::Float)
+        .to_device(device);
+
+    // Replicate single frame across T time steps
+    let t = t.expand([1, 3, frames, height, width], true);
+
+    // Pad 3 → 4 latent channels (4th channel = zeros)
+    let zeros = Tensor::zeros([1, 1, frames, height, width], (Kind::Float, device));
+    let latent = Tensor::cat(&[&t, &zeros], 1);
+
+    eprintln!("loaded init image: {path} -> [{}, {}, {}, {}, {}]",
+        latent.size()[0], latent.size()[1], latent.size()[2], latent.size()[3], latent.size()[4]);
+    Ok(latent)
 }
 
 fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64, context_dim: Option<i64>) -> LTXModel {
@@ -383,6 +436,27 @@ fn main() {
         prompts.iter().map(|_| Tensor::randn([1, 4, dim], (Kind::Float, device))).collect()
     };
 
+    // Load init image for img2img (once, shared across prompts)
+    let init_image: Option<Tensor> = if let Some(ref img_path) = args.init_image {
+        let strength = args.strength.clamp(0.0, 1.0);
+        if !(0.0..=1.0).contains(&strength) {
+            eprintln!("error: --strength must be in [0.0, 1.0]");
+            process::exit(1);
+        }
+        match load_init_image(img_path, args.frames, args.height, args.width, device) {
+            Ok(img) => {
+                eprintln!("img2img mode: strength={strength:.2}");
+                Some(img)
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
+
     // Phase 3: Denoise each prompt
     let total = prompts.len();
     let mut completed = 0u32;
@@ -432,17 +506,37 @@ fn main() {
         };
 
         // Denoise
-        tch::manual_seed(args.seed);
-        let mut x = Tensor::randn([b, c, args.frames, args.height, args.width], (Kind::Float, device));
-
         let scheduler = Ltx2Scheduler::default();
         let guider = CFG::new(args.cfg);
         let step = EulerStep::new();
+        let noiser = GaussianNoiser::new();
         let sigmas = scheduler.sigmas(args.steps);
 
         let t0 = std::time::Instant::now();
-        eprintln!("{prompt_label}denoising: {} steps, cfg={}, seed={}", args.steps, args.cfg, args.seed);
-        for i in 0..args.steps {
+
+        let (mut x, start_step) = if let Some(ref init_latent) = init_image {
+            // img2img: add noise to the init image at the sigma level
+            // determined by strength, then denoise from there
+            let strength = args.strength.clamp(0.0, 1.0);
+            let start_step = (strength * args.steps as f64).round() as usize;
+            let start_step = start_step.min(args.steps);
+            let start_sigma = sigmas[start_step];
+
+            eprintln!(
+                "{prompt_label}img2img: {} steps from sigma {:.4}, strength={strength:.2}",
+                args.steps - start_step, start_sigma
+            );
+
+            let noise = Tensor::randn_like(init_latent);
+            let noisy = noiser.add_noise(init_latent, &noise, start_sigma);
+            (noisy, start_step)
+        } else {
+            // txt2img: start from pure noise
+            tch::manual_seed(args.seed);
+            eprintln!("{prompt_label}denoising: {} steps, cfg={}, seed={}", args.steps, args.cfg, args.seed);
+            (Tensor::randn([b, c, args.frames, args.height, args.width], (Kind::Float, device)), 0)
+        };
+        for i in start_step..args.steps {
             let sigma = sigmas[i];
             let next_sigma = sigmas[i + 1];
 

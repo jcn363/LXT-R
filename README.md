@@ -63,6 +63,26 @@ cargo run --release --bin ltx-inference -- \
   --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
   --steps 8 --height 32 --width 32 --frames 8
 
+# img2img — transform an existing image with a text prompt
+cargo run --release --bin ltx-inference -- \
+  --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
+  --tokenizer weights/tokenizer/spiece.model \
+  --text-weights weights/text_encoder.safetensors \
+  --init-image path/to/image.png \
+  --prompt "a sunset over mountains" \
+  --strength 0.5 \
+  --steps 20
+
+# img2img with batch prompts (same image, multiple prompts)
+cargo run --release --bin ltx-inference -- \
+  --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
+  --tokenizer weights/tokenizer/spiece.model \
+  --text-weights weights/text_encoder.safetensors \
+  --init-image path/to/image.png \
+  --prompts-file prompts.txt \
+  --strength 0.6 \
+  --steps 15
+
 # Batch processing — multiple prompts from file
 printf "a sunset over mountains\na cat walking on grass\na dog running\n" > prompts.txt
 cargo run --release --bin ltx-inference -- \
@@ -168,6 +188,8 @@ python3 scripts/convert_ltx_weights.py \
 | `--output-dir` | `batch_output` | Output directory for batch results |
 | `--seed` | `42` | Random seed for reproducibility |
 | `--resume` | off | Skip prompts whose output directory already exists |
+| `--init-image` | none | Input image for img2img mode (any format: PNG, JPG, etc.) |
+| `--strength` | `0.75` | Denoising strength for img2img (0.0=keep original, 1.0=full txt2img) |
 | `--height` | `16` | Latent height |
 | `--width` | `16` | Latent width |
 | `--frames` | `4` | Number of frames |
@@ -341,11 +363,13 @@ crates/
 - Prompt conditioning via T5 cross-attention (4096-dim context)
 - GPU support via `--device auto` (CUDA, MPS auto-detection) or explicit `cuda`/`mps`/`cpu`
 - Batch processing: `--prompts-file` with upfront encoding, `--resume`, `--seed`, manifest.json
+- img2img mode: `--init-image` + `--strength` for image-guided generation
 - eframe GUI with video playback toolbar and export (PNG/MP4/GIF)
 - CLI with full argument support
 
 ### Known Limitations
 - **VAE decoder** — Decoder architecture mismatch with Python model (7 up_blocks vs 4 in Rust). Needs architecture alignment.
+- **VAE encoder** — Encoder architecture mismatch with Python model (timestep-conditioned, different channel dims). img2img uses direct image-to-latent conversion instead.
 - **Resolution** — 32x32 works with 8 steps on 32GB RAM. Higher resolutions require GPU or model sharding.
 - **56 skipped weights** — Cross-attention K/V projections use context_dim=4096 (T5) but were trained with 2048 (Gemma3).
 
