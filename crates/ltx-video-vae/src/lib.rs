@@ -19,6 +19,60 @@ use sampling::{depth_to_space, space_to_depth};
 
 pub use configurator::default_encoder_block_descs;
 
+/// Load VAE weights from a safetensors file into a VarStore.
+///
+/// Maps VarStore paths (`/` separators) to checkpoint paths (`.` separators),
+/// handling the Python convention where conv modules store parameters as
+/// `conv.weight`/`conv.bias` rather than bare `weight`/`bias`.
+pub fn load_vae_weights(vs: &tch::nn::VarStore, path: &str, prefix: &str) -> u32 {
+    let data = std::fs::read(path).expect("failed to read weight file");
+    let st = safetensors::SafeTensors::deserialize(&data).expect("failed to deserialize");
+    let mut loaded = 0u32;
+    let _no_grad = tch::no_grad_guard();
+    let mut vars = vs.variables();
+
+    for (name, tensor) in vars.iter_mut() {
+        // Convert VarStore "/" separators to "."
+        let ckpt_name = format!("{prefix}{}", name.replace('/', "."));
+        // Try direct match first
+        if load_one(&st, &ckpt_name, tensor) {
+            loaded += 1;
+            continue;
+        }
+        // The Python checkpoint wraps conv parameters under a ".conv" submodule.
+        // VarStore has "...conv1.weight" but checkpoint has "...conv1.conv.weight".
+        // Try inserting ".conv" before the final ".weight" or ".bias".
+        if let Some(pos) = ckpt_name.rfind('.') {
+            let suffix = &ckpt_name[pos + 1..];
+            if suffix == "weight" || suffix == "bias" {
+                let base = &ckpt_name[..pos];
+                let wrapped = format!("{base}.conv.{suffix}");
+                if load_one(&st, &wrapped, tensor) {
+                    loaded += 1;
+                }
+            }
+        }
+    }
+    loaded
+}
+
+fn load_one(st: &safetensors::SafeTensors, key: &str, tensor: &mut tch::Tensor) -> bool {
+    if let Ok(view) = st.tensor(key) {
+        let kind = match view.dtype() {
+            safetensors::Dtype::F16 => tch::Kind::Half,
+            safetensors::Dtype::BF16 => tch::Kind::BFloat16,
+            _ => tch::Kind::Float,
+        };
+        let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
+        let loaded = tch::Tensor::from_data_size(view.data(), &shape, kind);
+        if tensor.size() == loaded.size() {
+            tensor.copy_(&loaded);
+            return true;
+        }
+    }
+    false
+}
+
 use encoder_blocks::EncoderStage;
 
 // ---------------------------------------------------------------------------
@@ -83,7 +137,7 @@ impl VideoEncoder {
 
         let mut blocks = Vec::new();
         for (i, desc) in block_descs.iter().enumerate() {
-            let block_vs = vs / format!("down_blocks.{i}");
+            let block_vs = vs / format!("down_blocks/{i}");
             let stage = match &desc.kind {
                 EncoderBlockKind::ResBlocks(n) => {
                     EncoderStage::ResBlocks(
@@ -95,16 +149,14 @@ impl VideoEncoder {
                 }
                 EncoderBlockKind::DownsampleConv => {
                     EncoderStage::DownsampleConv(
-                        encoder_blocks::make_downsample_conv(
-                            &block_vs, desc.in_ch, causal,
-                        )
+                        encoder_blocks::DownsampleConv::new_block(&block_vs, desc.in_ch)
                     )
                 }
                 EncoderBlockKind::ChannelChangeDownsample => {
                     EncoderStage::ChannelChange(
                         encoder_blocks::ChannelChangeDownsample::new(
                             &block_vs, desc.in_ch, desc.out_ch,
-                            norm_type, norm_groups, causal,
+                            norm_type, norm_groups,
                         )
                     )
                 }
@@ -132,8 +184,9 @@ impl VideoEncoder {
     pub fn forward(&self, x: &Tensor) -> Tensor {
         let x = space_to_depth(x, 4);
         let mut h = self.conv_in.forward_t(&x, false);
-        for block in &self.blocks {
-            h = block.forward(&h);
+
+        for stage in &self.blocks {
+            h = stage.forward(&h);
         }
         self.conv_out.forward_t(&h, false)
     }
@@ -142,7 +195,6 @@ impl VideoEncoder {
     ///
     /// Splits the 129-channel output into mean(64) + logvar(64) + scale(1),
     /// then reparameterizes: `latent = mean + exp(0.5 * logvar) * noise`.
-    /// The scale channel is discarded.
     pub fn encode(&self, x: &Tensor) -> Tensor {
         let raw = self.forward(x);
         let mean = raw.narrow(1, 0, 64);
@@ -152,10 +204,14 @@ impl VideoEncoder {
         mean + std * noise
     }
 
-    /// Encode and return the mean only (deterministic, for img2img).
+    /// Encode and return the full latent (deterministic, for img2img).
+    ///
+    /// Returns the first 128 of 129 conv_out channels directly. This is the
+    /// raw encoder output before any reparameterization — suitable when you
+    /// want deterministic encoding without sampling noise.
     pub fn encode_mean(&self, x: &Tensor) -> Tensor {
         let raw = self.forward(x);
-        raw.narrow(1, 0, 64)
+        raw.narrow(1, 0, 128)
     }
 }
 
@@ -242,18 +298,18 @@ impl VideoDecoder {
         let mut stages = Vec::new();
         for (s, (&(block_idx, ch), &n_res)) in stage_descs.iter().zip(resblock_counts.iter()).enumerate() {
             let te = TimestepEmbedding::new(
-                &(vs / format!("up_blocks.{block_idx}")),
+                &(vs / format!("up_blocks/{block_idx}/time_embedder")),
                 sinusoidal_dim,
                 time_embed_out_dims[s],
             );
             let mut resblocks = Vec::new();
             for j in 0..n_res {
                 let rb = DecoderResBlock::new(
-                    &(vs / format!("up_blocks.{block_idx}.res_blocks.{j}")),
+                    &(vs / format!("up_blocks/{block_idx}/res_blocks/{j}")),
                     ch, norm_type, norm_groups, causal,
                 );
                 let ss = vs.var(
-                    &format!("up_blocks.{block_idx}.res_blocks.{j}.scale_shift_table"),
+                    &format!("up_blocks/{block_idx}/res_blocks/{j}/scale_shift_table"),
                     &[4, ch],
                     tch::nn::init::Init::Const(0.0),
                 );
@@ -267,7 +323,7 @@ impl VideoDecoder {
         let conv_upsamples: Vec<ConvUpsample> = conv_descs.iter()
             .map(|&(block_idx, in_ch, out_ch)| {
                 ConvUpsample::new(
-                    &(vs / format!("up_blocks.{block_idx}")),
+                    &(vs / format!("up_blocks/{block_idx}")),
                     in_ch, out_ch, norm_type, norm_groups, causal,
                 )
             })
@@ -323,14 +379,13 @@ impl VideoDecoder {
         }
 
         // last_time_embedder + last_scale_shift_table modulation
-        let t_last = self.last_time_embedder.forward(&t);
-        let last_mod = &self.last_scale_shift_table + &t_last.unsqueeze(1);
-        let chunks = last_mod.chunk(2, 1);
-        let shift = &chunks[0];
-        let scale = &chunks[1];
-        // Apply to the final 128-ch output: we need GroupNorm here
-        // But the checkpoint has no norm after the last resblock stage.
-        // The modulated norm is applied: h * (1 + scale) + shift
+        let t_last = self.last_time_embedder.forward(&t); // [B, 128]
+        let last_mod = &self.last_scale_shift_table + &t_last.unsqueeze(1); // [B, 2, 128]
+        let bsz = last_mod.size()[0];
+        let c = last_mod.size()[2];
+        let flat = last_mod.reshape([bsz * 2 * c]);
+        let shift = flat.narrow(0, 0, c).reshape([bsz, c, 1, 1, 1]);
+        let scale = flat.narrow(0, c, c).reshape([bsz, c, 1, 1, 1]);
         h = h * (1.0 + scale) + shift;
 
         let h = h.silu();

@@ -276,8 +276,8 @@ fn encode_via_vae(
 
     // Load VAE encoder weights
     eprintln!("loading VAE encoder weights from {vae_weights_path}...");
-    let loaded = load_vae_encoder_weights(&vs, vae_weights_path)?;
-    eprintln!("  loaded {loaded} encoder tensors");
+    let loaded = ltx_video_vae::load_vae_weights(&vs, vae_weights_path, "vae.");
+    eprintln!("  loaded {loaded} VAE tensors");
 
     // Encode to 128-channel latent (mean only, deterministic)
     eprintln!("encoding image via VAE encoder ({w}x{h} -> latent)...");
@@ -289,38 +289,6 @@ fn encode_via_vae(
     drop(vs);
 
     Ok(latent)
-}
-
-/// Load VAE encoder weights from a safetensors file.
-///
-/// Strips `vae.encoder.` prefix from checkpoint keys to match VarStore paths.
-fn load_vae_encoder_weights(vs: &tch::nn::VarStore, path: &str) -> Result<u32, String> {
-    let data = std::fs::read(path).map_err(|e| format!("read {path}: {e}"))?;
-    let st = safetensors::SafeTensors::deserialize(&data)
-        .map_err(|e| format!("deserialize {path}: {e}"))?;
-
-    let mut loaded = 0u32;
-    let _no_grad = tch::no_grad_guard();
-    let mut vars = vs.variables();
-
-    for (name, tensor) in vars.iter_mut() {
-        // Try mapping "encoder.xxx" -> checkpoint "vae.encoder.xxx"
-        let ckpt_name = format!("vae.{name}");
-        if let Ok(view) = st.tensor(&ckpt_name) {
-            let kind = match view.dtype() {
-                safetensors::Dtype::F16 => tch::Kind::Half,
-                safetensors::Dtype::BF16 => tch::Kind::BFloat16,
-                _ => tch::Kind::Float,
-            };
-            let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
-            let loaded_tensor = Tensor::from_data_size(view.data(), &shape, kind);
-            if tensor.size() == loaded_tensor.size() {
-                tensor.copy_(&loaded_tensor);
-                loaded += 1;
-            }
-        }
-    }
-    Ok(loaded)
 }
 
 fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64, context_dim: Option<i64>) -> LTXModel {

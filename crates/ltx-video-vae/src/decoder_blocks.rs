@@ -54,11 +54,18 @@ impl DecoderResBlock {
     ///
     /// `modulated`: `[B, 4, C]` — scale_shift_table + t_emb, already summed.
     pub fn forward_modulated(&self, x: &Tensor, modulated: &Tensor) -> Tensor {
-        let chunks = modulated.chunk(4, 1);
-        let shift1 = &chunks[0];
-        let scale1 = &chunks[1];
-        let shift2 = &chunks[2];
-        let scale2 = &chunks[3];
+        // modulated: [B, 4, C] from (scale_shift_table [4,C] + t_emb [B,4,C])
+        // Split into 4 [B, C] tensors, unsqueeze to [B, C, 1, 1, 1] for 5D broadcast
+        let bsz = modulated.size()[0];
+        let c = modulated.size()[2];
+        let mut target: Vec<i64> = vec![bsz, c, 1, 1, 1];
+
+        // Flatten [B,4,C] -> [B*4*C], then select slices
+        let flat = modulated.reshape([bsz * 4 * c]);
+        let shift1 = flat.narrow(0, 0 * c, c).reshape(&target);
+        let scale1 = flat.narrow(0, 1 * c, c).reshape(&target);
+        let shift2 = flat.narrow(0, 2 * c, c).reshape(&target);
+        let scale2 = flat.narrow(0, 3 * c, c).reshape(&target);
 
         let h = self.norm1.forward_t(x, false);
         let h: Tensor = h * (1.0 + scale1) + shift1;

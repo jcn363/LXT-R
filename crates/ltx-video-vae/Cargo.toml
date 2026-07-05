@@ -10,10 +10,12 @@ ltx-conv = { path = "../ltx-conv" }
 ltx-resblock = { path = "../ltx-resblock" }
 ltx-timestep = { path = "../ltx-timestep" }
 tch = { workspace = true }
+safetensors = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+safetensors = { workspace = true }
 
 [lints]
 workspace = true
