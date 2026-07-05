@@ -8,6 +8,8 @@ ltx-types = { path = "../ltx-types" }
 ltx-norm = { path = "../ltx-norm" }
 ltx-attention = { path = "../ltx-attention" }
 tch = { workspace = true }
+safetensors = { workspace = true }
+memmap2 = "0.9"
 sentencepiece = { workspace = true }
 serde = { workspace = true }
 

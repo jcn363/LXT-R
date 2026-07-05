@@ -16,6 +16,7 @@ use ltx_norm::RMSNorm;
 use ltx_patchify::{patchify_5d, unpatchify_5d};
 use ltx_text_encoder::configurator;
 use ltx_text_encoder::encoder::{GemmaTextEncoder, T5TextEncoder};
+use ltx_text_encoder::tokenizer::LTXVGemmaTokenizer;
 use ltx_transformer::block::BasicAVTransformerBlock;
 use ltx_transformer::model::LTXModel;
 use ltx_types::{Guider, Scheduler, STABILITY_EPS};
@@ -24,7 +25,7 @@ use tch::{Device, Kind, Tensor};
 
 enum TextEncoder {
     T5(T5TextEncoder),
-    Gemma3(GemmaTextEncoder),
+    Gemma3(Box<GemmaTextEncoder>),
 }
 
 impl TextEncoder {
@@ -95,7 +96,7 @@ fn parse_device(s: &str) -> Device {
     }
 }
 
-fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64) -> LTXModel {
+fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64, context_dim: Option<i64>) -> LTXModel {
     let mut blocks = Vec::new();
     for i in 0..num_layers {
         blocks.push(BasicAVTransformerBlock::new(
@@ -103,7 +104,7 @@ fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64) ->
             dim,
             4,
             dim / 4,
-            None,
+            context_dim,
             RopeType::Interleaved,
         ));
     }
@@ -188,27 +189,29 @@ fn load_weights(vs: &tch::nn::VarStore, path: &str) -> Result<u32, String> {
 }
 
 /// Phase 1: Load text encoder, encode prompt, return context tensor.
-/// The encoder VarStore is dropped after this function returns, freeing memory.
+/// Uses memory-mapped I/O to avoid loading the full 18GB file into RAM.
 fn encode_prompt(
     tok_path: &str,
     tw_path: &str,
     prompt: &str,
 ) -> Result<Tensor, String> {
-    eprintln!("loading text encoder...");
-    let data = std::fs::read(tw_path).map_err(|e| format!("read text weights: {e}"))?;
-    let is_t5 = safetensors::SafeTensors::deserialize(&data)
-        .map(|st| st.tensors().iter().any(|(k, _)| k.starts_with("encoder.block.")))
-        .unwrap_or(false);
-    drop(data);
+    eprintln!("loading text encoder (mmap)...");
+
+    // Memory-map the file — no 18GB allocation
+    let file = std::fs::File::open(tw_path).map_err(|e| format!("open {tw_path}: {e}"))?;
+    let mmap = unsafe { memmap2::Mmap::map(&file).map_err(|e| format!("mmap: {e}"))? };
+    let st = safetensors::SafeTensors::deserialize(&mmap)
+        .map_err(|e| format!("deserialize: {e}"))?;
+
+    let is_t5 = st.tensors().iter().any(|(k, _)| k.starts_with("encoder.block."));
 
     let (encoder, hidden) = if is_t5 {
-        eprintln!("  T5 encoder detected");
+        eprintln!("  T5 encoder detected (direct load, FP16)");
         let config = configurator::default_t5_config();
-        let vs = tch::nn::VarStore::new(Device::Cpu);
-        let enc = configurator::from_config_t5(&vs.root(), &config, tok_path, 512)
-            .map_err(|e| format!("T5 init: {e}"))?;
+        let tokenizer = LTXVGemmaTokenizer::from_file(tok_path, 512)
+            .map_err(|e| format!("tokenizer: {e}"))?;
+        let enc = T5TextEncoder::from_checkpoint(&st, &config, tokenizer, 512, Device::Cpu);
         let h = enc.hidden_size();
-        load_weights(&vs, tw_path)?;
         (TextEncoder::T5(enc), h)
     } else {
         eprintln!("  Gemma3 encoder detected");
@@ -218,15 +221,18 @@ fn encode_prompt(
             .map_err(|e| format!("Gemma3 init: {e}"))?;
         let h = enc.hidden_size();
         load_weights(&vs, tw_path)?;
-        (TextEncoder::Gemma3(enc), h)
+        (TextEncoder::Gemma3(Box::new(enc)), h)
     };
+
+    drop(st);
+    drop(mmap);
+    drop(file);
 
     eprintln!("  encoding prompt ({hidden}d hidden)...");
     let context = encoder.encode(prompt);
     let seq_len = context.size()[1];
     eprintln!("  context: [1, {seq_len}, {hidden}]");
 
-    // Encoder dropped here — VarStore and all 18GB freed
     drop(encoder);
     eprintln!("  text encoder freed");
 
@@ -263,7 +269,13 @@ fn main() {
     // Phase 2: Build transformer on target device
     eprintln!("loading transformer on {device:?}...");
     let vs = tch::nn::VarStore::new(device);
-    let model = build_model(&vs.root(), dim, patch_dim, num_layers);
+    // If text encoder was used, pass its hidden_size as context_dim for cross-attention
+    let context_dim = if !use_random {
+        Some(context.size()[2])
+    } else {
+        None
+    };
+    let model = build_model(&vs.root(), dim, patch_dim, num_layers, context_dim);
 
     let patchify_proj = if !use_random {
         Some(tch::nn::linear(

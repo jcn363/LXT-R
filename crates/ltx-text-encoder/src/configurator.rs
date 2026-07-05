@@ -1,11 +1,10 @@
 use ltx_types::{NORM_EPS, ROPE_THETA};
 
 use crate::config::{LTXVTextEncoderConfig, T5ConfigData};
-use crate::encoder::{GemmaTextEncoder, T5TextEncoder};
+use crate::encoder::GemmaTextEncoder;
 use crate::tokenizer::LTXVGemmaTokenizer;
 
 /// Build a GemmaTextEncoder from configuration data.
-#[must_use = "caller must handle encoder build error"]
 pub fn from_config(
     vs: &tch::nn::Path,
     config: &LTXVTextEncoderConfig,
@@ -13,17 +12,6 @@ pub fn from_config(
 ) -> Result<GemmaTextEncoder, Box<dyn std::error::Error + Send + Sync>> {
     let tokenizer = LTXVGemmaTokenizer::from_file(tokenizer_path, config.max_text_length as usize)?;
     Ok(GemmaTextEncoder::new(vs, config, tokenizer))
-}
-
-/// Build a T5TextEncoder from configuration data.
-pub fn from_config_t5(
-    vs: &tch::nn::Path,
-    config: &T5ConfigData,
-    tokenizer_path: &str,
-    max_text_length: i64,
-) -> Result<T5TextEncoder, Box<dyn std::error::Error + Send + Sync>> {
-    let tokenizer = LTXVGemmaTokenizer::from_file(tokenizer_path, max_text_length as usize)?;
-    Ok(T5TextEncoder::new(vs, config, tokenizer, max_text_length))
 }
 
 /// Create a default T5 configuration matching T5-XXL.

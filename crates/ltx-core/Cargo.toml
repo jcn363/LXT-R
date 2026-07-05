@@ -28,6 +28,7 @@ ltx-loader = { path = "../ltx-loader" }
 ltx-quantization = { path = "../ltx-quantization" }
 tch = { workspace = true }
 safetensors = { workspace = true }
+memmap2 = "0.9"
 clap = { version = "4", features = ["derive"] }
 
 [[bench]]
