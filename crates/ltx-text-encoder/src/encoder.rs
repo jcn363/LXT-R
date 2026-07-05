@@ -1,3 +1,6 @@
+use std::borrow::Borrow;
+
+use tch::nn::Path;
 use tch::Tensor;
 
 use crate::config::LTXVTextEncoderConfig;
@@ -22,13 +25,21 @@ pub struct GemmaTextEncoder {
 }
 
 impl GemmaTextEncoder {
-    pub fn new(config: &LTXVTextEncoderConfig, tokenizer: LTXVGemmaTokenizer) -> Self {
-        let text_model = Gemma3TextModel::new(&config.gemma3);
-        let vision_tower = SigLIPVisionTower::new(&config.siglip);
+    pub fn new<'a>(
+        vs: impl Borrow<Path<'a>>,
+        config: &LTXVTextEncoderConfig,
+        tokenizer: LTXVGemmaTokenizer,
+    ) -> Self {
+        let vs = vs.borrow();
+        let text_model = Gemma3TextModel::new(vs / "text_model", &config.gemma3);
+        let vision_tower = SigLIPVisionTower::new(vs / "vision_tower", &config.siglip);
         let feature_extractor = FeatureExtractor::new(vision_tower);
         let image_processor = ImageProcessor::new(config.siglip.image_size);
-        let embeddings_processor =
-            EmbeddingsProcessor::new(config.gemma3.hidden_size, config.gemma3.hidden_size);
+        let embeddings_processor = EmbeddingsProcessor::new(
+            vs / "embeddings_processor",
+            config.gemma3.hidden_size,
+            config.gemma3.hidden_size,
+        );
         let embeddings_connector = EmbeddingsConnector::new();
         let prompt_enhancer = PromptEnhancer::new();
 
@@ -45,15 +56,14 @@ impl GemmaTextEncoder {
     }
 
     /// Encode text to hidden states using Gemma3.
+    /// Returns full sequence: [B, seq_len, hidden_size].
     pub fn encode(&self, text: &str) -> Tensor {
         let enhanced = self.prompt_enhancer.enhance(text);
         let ids = self.tokenizer.encode(&enhanced).unwrap_or_default();
-        let seq_len = ids.len() as i64;
         let input_ids = Tensor::f_from_slice::<i64>(&ids)
             .expect("Failed to create tensor from token IDs")
             .unsqueeze(0);
-        let hidden = self.text_model.forward(&input_ids);
-        hidden.narrow(1, seq_len - 1, 1).squeeze_dim(1)
+        self.text_model.forward(&input_ids)
     }
 
     /// Encode text with raw token IDs.

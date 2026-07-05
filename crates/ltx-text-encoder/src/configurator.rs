@@ -7,11 +7,12 @@ use crate::tokenizer::LTXVGemmaTokenizer;
 /// Build a GemmaTextEncoder from configuration data.
 #[must_use = "caller must handle encoder build error"]
 pub fn from_config(
+    vs: &tch::nn::Path,
     config: &LTXVTextEncoderConfig,
     tokenizer_path: &str,
 ) -> Result<GemmaTextEncoder, Box<dyn std::error::Error + Send + Sync>> {
     let tokenizer = LTXVGemmaTokenizer::from_file(tokenizer_path, config.max_text_length as usize)?;
-    Ok(GemmaTextEncoder::new(config, tokenizer))
+    Ok(GemmaTextEncoder::new(vs, config, tokenizer))
 }
 
 /// Create a default configuration matching the LTX-V Gemma3-12B + SigLIP-L setup.

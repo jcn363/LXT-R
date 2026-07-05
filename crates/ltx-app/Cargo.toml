@@ -15,6 +15,7 @@ ltx-attention = { path = "../ltx-attention" }
 ltx-components = { path = "../ltx-components" }
 ltx-patchify = { path = "../ltx-patchify" }
 ltx-transformer = { path = "../ltx-transformer" }
+ltx-text-encoder = { path = "../ltx-text-encoder" }
 ltx-video-vae = { path = "../ltx-video-vae" }
 tch = { workspace = true }
 safetensors = { workspace = true }

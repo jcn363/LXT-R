@@ -3,7 +3,7 @@
 //! Usage:
 //!   ltx-inference --steps 4
 //!   ltx-inference --weights model.safetensors --steps 20
-//!   ltx-inference --weights model.safetensors --height 32 --width 32 --frames 4
+//!   ltx-inference --weights model.safetensors --tokenizer tokenizer.model --text-weights text.safetensors --prompt "a sunset"
 
 use std::process;
 
@@ -12,6 +12,7 @@ use ltx_attention::RopeType;
 use ltx_components::{EulerStep, Ltx2Scheduler, CFG};
 use ltx_norm::RMSNorm;
 use ltx_patchify::{patchify_5d, unpatchify_5d};
+use ltx_text_encoder::configurator;
 use ltx_transformer::block::BasicAVTransformerBlock;
 use ltx_transformer::model::LTXModel;
 use ltx_types::{Guider, Scheduler, STABILITY_EPS};
@@ -24,6 +25,14 @@ struct Args {
     /// Path to .safetensors weights (omit for random init)
     #[arg(short, long)]
     weights: Option<String>,
+
+    /// Path to SentencePiece tokenizer model
+    #[arg(long)]
+    tokenizer: Option<String>,
+
+    /// Path to text encoder .safetensors weights
+    #[arg(long)]
+    text_weights: Option<String>,
 
     /// Denoising steps
     #[arg(short, long, default_value_t = 20)]
@@ -99,6 +108,33 @@ fn main() {
         }
     }
 
+    // Build text encoder if tokenizer + text weights provided
+    let text_encoder = match (&args.tokenizer, &args.text_weights) {
+        (Some(tok_path), Some(tw_path)) => {
+            eprintln!("loading text encoder...");
+            let config = configurator::default_config();
+            let encoder_vs = tch::nn::VarStore::new(Device::Cpu);
+            let encoder = match configurator::from_config(&encoder_vs.root(), &config, tok_path) {
+                Ok(enc) => enc,
+                Err(e) => {
+                    eprintln!("error: text encoder init failed: {e}");
+                    process::exit(1);
+                }
+            };
+            if let Err(e) = load_weights(&encoder_vs, tw_path) {
+                eprintln!("error: text weights: {e}");
+                process::exit(1);
+            }
+            eprintln!("text encoder: {} hidden, {} max_len", encoder.hidden_size(), encoder.max_text_length());
+            Some((encoder_vs, encoder))
+        }
+        (Some(_), None) => {
+            eprintln!("warning: --tokenizer requires --text-weights, ignoring tokenizer");
+            None
+        }
+        _ => None,
+    };
+
     let n_params: usize = vs.variables().values().map(|t| t.numel()).sum();
     eprintln!(
         "init: {dim}d, {num_layers} layers, {:.1}M params",
@@ -107,7 +143,17 @@ fn main() {
 
     tch::manual_seed(42);
     let mut x = Tensor::randn([b, c, args.frames, args.height, args.width], (Kind::Float, Device::Cpu));
-    let context = Tensor::randn([1, 4, dim], (Kind::Float, Device::Cpu));
+
+    // Encode prompt to context
+    let context = if let Some((ref _encoder_vs, ref encoder)) = text_encoder {
+        let encoded = encoder.encode(&args.prompt);
+        // encoded: [1, seq_len, hidden_size] -> use as context
+        let seq_len = encoded.size()[1];
+        eprintln!("encoded prompt: [1, {seq_len}, {}]", encoded.size()[2]);
+        encoded
+    } else {
+        Tensor::randn([1, 4, dim], (Kind::Float, Device::Cpu))
+    };
 
     let scheduler = Ltx2Scheduler::default();
     let guider = CFG::new(args.cfg);

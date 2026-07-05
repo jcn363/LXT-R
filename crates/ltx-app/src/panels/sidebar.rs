@@ -33,6 +33,40 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     });
     ui.add_space(4.0);
 
+    // Text Encoder
+    ui.label("Text Encoder (optional)");
+    ui.horizontal(|ui| {
+        let label = match &state.tokenizer_path {
+            Some(p) => p.file_name().unwrap_or_default().to_string_lossy().to_string(),
+            None => "No tokenizer".to_string(),
+        };
+        ui.label(&label);
+        if ui.button("Browse…").clicked() {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("SentencePiece", &["model"])
+                .pick_file()
+            {
+                state.tokenizer_path = Some(path);
+            }
+        }
+    });
+    ui.horizontal(|ui| {
+        let label = match &state.text_weights_path {
+            Some(p) => p.file_name().unwrap_or_default().to_string_lossy().to_string(),
+            None => "No text weights".to_string(),
+        };
+        ui.label(&label);
+        if ui.button("Browse…").clicked() {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("SafeTensors", &["safetensors"])
+                .pick_file()
+            {
+                state.text_weights_path = Some(path);
+            }
+        }
+    });
+    ui.add_space(4.0);
+
     // Resolution
     ui.label("Resolution");
     ui.horizontal(|ui| {
@@ -89,6 +123,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             let params = InferenceParams {
                 prompt: state.prompt.clone(),
                 weights_path: state.weights_path.clone(),
+                tokenizer_path: state.tokenizer_path.clone(),
+                text_weights_path: state.text_weights_path.clone(),
                 height: state.height,
                 width: state.width,
                 frames: state.frames,

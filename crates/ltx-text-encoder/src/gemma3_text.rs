@@ -1,5 +1,6 @@
-use tch::nn::Linear;
-use tch::nn::ModuleT;
+use std::borrow::Borrow;
+
+use tch::nn::{Linear, ModuleT, Path};
 use tch::Tensor;
 
 use ltx_attention::{
@@ -16,28 +17,27 @@ pub struct Gemma3MLP {
 }
 
 impl Gemma3MLP {
-    fn new(config: &Gemma3ConfigData) -> Self {
-        let vs = tch::nn::VarStore::new(tch::Device::Cpu);
-        let root = vs.root();
+    fn new<'a>(vs: impl Borrow<Path<'a>>, config: &Gemma3ConfigData) -> Self {
+        let vs = vs.borrow();
         let linear_cfg = tch::nn::LinearConfig {
             bias: false,
             ..Default::default()
         };
         Self {
             gate_proj: tch::nn::linear(
-                &root / "gate_proj",
+                vs / "gate_proj",
                 config.hidden_size,
                 config.intermediate_size,
                 linear_cfg,
             ),
             up_proj: tch::nn::linear(
-                &root / "up_proj",
+                vs / "up_proj",
                 config.hidden_size,
                 config.intermediate_size,
                 linear_cfg,
             ),
             down_proj: tch::nn::linear(
-                &root / "down_proj",
+                vs / "down_proj",
                 config.intermediate_size,
                 config.hidden_size,
                 linear_cfg,
@@ -65,41 +65,39 @@ pub struct Gemma3Attention {
 }
 
 impl Gemma3Attention {
-    fn new(config: &Gemma3ConfigData) -> Self {
-        let vs = tch::nn::VarStore::new(tch::Device::Cpu);
-        let root = vs.root();
+    fn new<'a>(vs: impl Borrow<Path<'a>>, config: &Gemma3ConfigData) -> Self {
+        let vs = vs.borrow();
         let linear_cfg = tch::nn::LinearConfig {
             bias: false,
             ..Default::default()
         };
-        let device = tch::Device::Cpu;
         Self {
             q_proj: tch::nn::linear(
-                &root / "q_proj",
+                vs / "q_proj",
                 config.hidden_size,
                 config.num_attention_heads * config.head_dim,
                 linear_cfg,
             ),
             k_proj: tch::nn::linear(
-                &root / "k_proj",
+                vs / "k_proj",
                 config.hidden_size,
                 config.num_key_value_heads * config.head_dim,
                 linear_cfg,
             ),
             v_proj: tch::nn::linear(
-                &root / "v_proj",
+                vs / "v_proj",
                 config.hidden_size,
                 config.num_key_value_heads * config.head_dim,
                 linear_cfg,
             ),
             o_proj: tch::nn::linear(
-                &root / "o_proj",
+                vs / "o_proj",
                 config.num_attention_heads * config.head_dim,
                 config.hidden_size,
                 linear_cfg,
             ),
-            q_norm: RMSNorm::new(config.head_dim, config.rms_norm_eps, device),
-            k_norm: RMSNorm::new(config.head_dim, config.rms_norm_eps, device),
+            q_norm: RMSNorm::default_eps_with_path(vs / "q_norm", config.head_dim),
+            k_norm: RMSNorm::default_eps_with_path(vs / "k_norm", config.head_dim),
             num_heads: config.num_attention_heads,
             num_kv_heads: config.num_key_value_heads,
             head_dim: config.head_dim,
@@ -128,7 +126,6 @@ impl Gemma3Attention {
             .reshape([b, seq_len, self.num_kv_heads, self.head_dim])
             .transpose(1, 2);
 
-        // GQA: repeat KV heads to match Q heads
         let repeat_factor = self.num_heads / self.num_kv_heads;
         let k = k.repeat_interleave_self_int(repeat_factor, 1, None);
         let v = v.repeat_interleave_self_int(repeat_factor, 1, None);
@@ -149,13 +146,13 @@ pub struct Gemma3DecoderLayer {
 }
 
 impl Gemma3DecoderLayer {
-    fn new(config: &Gemma3ConfigData) -> Self {
-        let device = tch::Device::Cpu;
+    fn new<'a>(vs: impl Borrow<Path<'a>>, config: &Gemma3ConfigData) -> Self {
+        let vs = vs.borrow();
         Self {
-            self_attn: Gemma3Attention::new(config),
-            mlp: Gemma3MLP::new(config),
-            input_norm: RMSNorm::new(config.hidden_size, config.rms_norm_eps, device),
-            post_attn_norm: RMSNorm::new(config.hidden_size, config.rms_norm_eps, device),
+            self_attn: Gemma3Attention::new(vs / "self_attn", config),
+            mlp: Gemma3MLP::new(vs / "mlp", config),
+            input_norm: RMSNorm::default_eps_with_path(vs / "input_norm", config.hidden_size),
+            post_attn_norm: RMSNorm::default_eps_with_path(vs / "post_attn_norm", config.hidden_size),
         }
     }
 
@@ -173,7 +170,7 @@ impl Gemma3DecoderLayer {
 }
 
 pub struct Gemma3TextModel {
-    embed_tokens_weight: Tensor,
+    embed_tokens: Tensor,
     layers: Vec<Gemma3DecoderLayer>,
     norm: RMSNorm,
     config: Gemma3ConfigData,
@@ -182,16 +179,19 @@ pub struct Gemma3TextModel {
 }
 
 impl Gemma3TextModel {
-    pub fn new(config: &Gemma3ConfigData) -> Self {
-        let device = tch::Device::Cpu;
-        let embed_tokens_weight = Tensor::randn(
-            [config.vocab_size, config.hidden_size],
-            (tch::Kind::Float, device),
+    pub fn new<'a>(vs: impl Borrow<Path<'a>>, config: &Gemma3ConfigData) -> Self {
+        let vs = vs.borrow();
+        let device = vs.device();
+
+        let embed_tokens = vs.var(
+            "embed_tokens",
+            &[config.vocab_size, config.hidden_size],
+            tch::nn::init::DEFAULT_KAIMING_UNIFORM,
         );
 
         let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
-        for _ in 0..config.num_hidden_layers {
-            layers.push(Gemma3DecoderLayer::new(config));
+        for i in 0..config.num_hidden_layers {
+            layers.push(Gemma3DecoderLayer::new(vs / format!("layers.{i}"), config));
         }
 
         let (cos_cache, sin_cache) = precompute_freqs_cis(
@@ -203,9 +203,9 @@ impl Gemma3TextModel {
         );
 
         Self {
-            embed_tokens_weight,
+            embed_tokens,
             layers,
-            norm: RMSNorm::new(config.hidden_size, config.rms_norm_eps, device),
+            norm: RMSNorm::default_eps_with_path(vs / "norm", config.hidden_size),
             config: config.clone(),
             cos_cache,
             sin_cache,
@@ -217,11 +217,10 @@ impl Gemma3TextModel {
         let cos = self.cos_cache.narrow(0, 0, seq_len);
         let sin = self.sin_cache.narrow(0, 0, seq_len);
 
-        // Embedding lookup via index_select
         let b = input_ids.size()[0];
         let flat_ids = input_ids.to_kind(tch::Kind::Int64).flatten(0, -1);
         let hidden_states = self
-            .embed_tokens_weight
+            .embed_tokens
             .index_select(0, &flat_ids)
             .reshape([b, seq_len, self.config.hidden_size]);
 

@@ -71,8 +71,21 @@ fn run_inference(
         (Kind::Float, device),
     );
 
-    // Text context (random for now — text encoder not wired)
-    let context = Tensor::randn([1, 4, dim], (Kind::Float, device));
+    // Text context
+    let context = if let (Some(tok_path), Some(tw_path)) = (&params.tokenizer_path, &params.text_weights_path) {
+        let config = ltx_text_encoder::configurator::default_config();
+        let encoder_vs = tch::nn::VarStore::new(Device::Cpu);
+        let encoder = ltx_text_encoder::configurator::from_config(&encoder_vs.root(), &config, tok_path.to_str().unwrap_or(""))
+            .map_err(|e| format!("text encoder init: {e}"))?;
+        load_weights(&encoder_vs, &tw_path)?;
+        let encoded = encoder.encode(&params.prompt);
+        let seq_len = encoded.size()[1];
+        let _ = event_tx.send(GuiEvent::Progress { step: 0, total: params.steps, sigma: 0.0 });
+        eprintln!("encoded prompt: [1, {seq_len}, {}]", encoded.size()[2]);
+        encoded
+    } else {
+        Tensor::randn([1, 4, dim], (Kind::Float, device))
+    };
 
     // Setup scheduler + guider + step
     let scheduler: Box<dyn Scheduler> = match params.scheduler {

@@ -1,10 +1,10 @@
-use tch::nn::Linear;
-use tch::nn::ModuleT;
+use std::borrow::Borrow;
+
+use tch::nn::{Linear, ModuleT, Path};
 use tch::Tensor;
 
 use ltx_attention::scaled_dot_product_attention;
 use ltx_norm::RMSNorm;
-use ltx_types::NORM_EPS;
 
 use crate::config::SigLIPConfigData;
 
@@ -14,22 +14,21 @@ pub struct SigLIPVisionMLP {
 }
 
 impl SigLIPVisionMLP {
-    fn new(config: &SigLIPConfigData) -> Self {
-        let vs = tch::nn::VarStore::new(tch::Device::Cpu);
-        let root = vs.root();
+    fn new<'a>(vs: impl Borrow<Path<'a>>, config: &SigLIPConfigData) -> Self {
+        let vs = vs.borrow();
         let linear_cfg = tch::nn::LinearConfig {
             bias: true,
             ..Default::default()
         };
         Self {
             fc1: tch::nn::linear(
-                &root / "fc1",
+                vs / "fc1",
                 config.hidden_size,
                 config.intermediate_size,
                 linear_cfg,
             ),
             fc2: tch::nn::linear(
-                &root / "fc2",
+                vs / "fc2",
                 config.intermediate_size,
                 config.hidden_size,
                 linear_cfg,
@@ -54,39 +53,18 @@ pub struct SigLIPVisionAttention {
 }
 
 impl SigLIPVisionAttention {
-    fn new(config: &SigLIPConfigData) -> Self {
-        let vs = tch::nn::VarStore::new(tch::Device::Cpu);
-        let root = vs.root();
+    fn new<'a>(vs: impl Borrow<Path<'a>>, config: &SigLIPConfigData) -> Self {
+        let vs = vs.borrow();
         let head_dim = config.hidden_size / config.num_attention_heads;
         let linear_cfg = tch::nn::LinearConfig {
             bias: true,
             ..Default::default()
         };
         Self {
-            q_proj: tch::nn::linear(
-                &root / "q_proj",
-                config.hidden_size,
-                config.hidden_size,
-                linear_cfg,
-            ),
-            k_proj: tch::nn::linear(
-                &root / "k_proj",
-                config.hidden_size,
-                config.hidden_size,
-                linear_cfg,
-            ),
-            v_proj: tch::nn::linear(
-                &root / "v_proj",
-                config.hidden_size,
-                config.hidden_size,
-                linear_cfg,
-            ),
-            out_proj: tch::nn::linear(
-                &root / "out_proj",
-                config.hidden_size,
-                config.hidden_size,
-                linear_cfg,
-            ),
+            q_proj: tch::nn::linear(vs / "q_proj", config.hidden_size, config.hidden_size, linear_cfg),
+            k_proj: tch::nn::linear(vs / "k_proj", config.hidden_size, config.hidden_size, linear_cfg),
+            v_proj: tch::nn::linear(vs / "v_proj", config.hidden_size, config.hidden_size, linear_cfg),
+            out_proj: tch::nn::linear(vs / "out_proj", config.hidden_size, config.hidden_size, linear_cfg),
             num_heads: config.num_attention_heads,
             head_dim,
         }
@@ -96,19 +74,13 @@ impl SigLIPVisionAttention {
         let b = x.size()[0];
         let n = x.size()[1];
 
-        let q = self
-            .q_proj
-            .forward_t(x, false)
+        let q = self.q_proj.forward_t(x, false)
             .reshape([b, n, self.num_heads, self.head_dim])
             .transpose(1, 2);
-        let k = self
-            .k_proj
-            .forward_t(x, false)
+        let k = self.k_proj.forward_t(x, false)
             .reshape([b, n, self.num_heads, self.head_dim])
             .transpose(1, 2);
-        let v = self
-            .v_proj
-            .forward_t(x, false)
+        let v = self.v_proj.forward_t(x, false)
             .reshape([b, n, self.num_heads, self.head_dim])
             .transpose(1, 2);
 
@@ -128,13 +100,13 @@ pub struct SigLIPVisionBlock {
 }
 
 impl SigLIPVisionBlock {
-    fn new(config: &SigLIPConfigData) -> Self {
-        let device = tch::Device::Cpu;
+    fn new<'a>(vs: impl Borrow<Path<'a>>, config: &SigLIPConfigData) -> Self {
+        let vs = vs.borrow();
         Self {
-            norm1: RMSNorm::new(config.hidden_size, NORM_EPS, device),
-            attn: SigLIPVisionAttention::new(config),
-            norm2: RMSNorm::new(config.hidden_size, NORM_EPS, device),
-            mlp: SigLIPVisionMLP::new(config),
+            norm1: RMSNorm::default_eps_with_path(vs / "norm1", config.hidden_size),
+            attn: SigLIPVisionAttention::new(vs / "attn", config),
+            norm2: RMSNorm::default_eps_with_path(vs / "norm2", config.hidden_size),
+            mlp: SigLIPVisionMLP::new(vs / "mlp", config),
         }
     }
 
@@ -161,29 +133,32 @@ pub struct SigLIPVisionTower {
 }
 
 impl SigLIPVisionTower {
-    pub fn new(config: &SigLIPConfigData) -> Self {
-        let device = tch::Device::Cpu;
+    pub fn new<'a>(vs: impl Borrow<Path<'a>>, config: &SigLIPConfigData) -> Self {
+        let vs = vs.borrow();
         let num_patches =
             (config.image_size / config.patch_size) * (config.image_size / config.patch_size);
-        let patch_embed_weight = Tensor::randn(
-            [config.hidden_size, 3, config.patch_size, config.patch_size],
-            (tch::Kind::Float, device),
+
+        let patch_embed_weight = vs.var(
+            "patch_embed_weight",
+            &[config.hidden_size, 3, config.patch_size, config.patch_size],
+            tch::nn::init::DEFAULT_KAIMING_UNIFORM,
         );
-        let position_embed_weight = Tensor::randn(
-            [1, num_patches + 1, config.hidden_size],
-            (tch::Kind::Float, device),
+        let position_embed_weight = vs.var(
+            "position_embed_weight",
+            &[1, num_patches + 1, config.hidden_size],
+            tch::nn::init::DEFAULT_KAIMING_UNIFORM,
         );
 
         let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
-        for _ in 0..config.num_hidden_layers {
-            layers.push(SigLIPVisionBlock::new(config));
+        for i in 0..config.num_hidden_layers {
+            layers.push(SigLIPVisionBlock::new(vs / format!("encoder.layers.{i}"), config));
         }
 
         Self {
             patch_embed_weight,
             position_embed_weight,
             layers,
-            post_layernorm: RMSNorm::new(config.hidden_size, NORM_EPS, device),
+            post_layernorm: RMSNorm::default_eps_with_path(vs / "post_layernorm", config.hidden_size),
             hidden_size: config.hidden_size,
             patch_size: config.patch_size,
         }

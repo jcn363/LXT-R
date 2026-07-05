@@ -49,9 +49,10 @@ impl DeviceKind {
 
 #[derive(Debug, Clone)]
 pub struct InferenceParams {
-    #[allow(dead_code)]
     pub prompt: String,
     pub weights_path: Option<PathBuf>,
+    pub tokenizer_path: Option<PathBuf>,
+    pub text_weights_path: Option<PathBuf>,
     pub height: i64,
     pub width: i64,
     pub frames: i64,
@@ -85,6 +86,8 @@ pub enum GuiCommand {
 pub struct AppState {
     pub prompt: String,
     pub weights_path: Option<PathBuf>,
+    pub tokenizer_path: Option<PathBuf>,
+    pub text_weights_path: Option<PathBuf>,
     pub height: i64,
     pub width: i64,
     pub frames: i64,
@@ -107,6 +110,8 @@ impl Default for AppState {
         Self {
             prompt: String::from("a colorful abstract pattern"),
             weights_path: None,
+            tokenizer_path: None,
+            text_weights_path: None,
             height: DEFAULT_HEIGHT,
             width: DEFAULT_WIDTH,
             frames: DEFAULT_FRAMES,
