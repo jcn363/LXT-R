@@ -158,6 +158,50 @@ python3 scripts/convert_ltx_weights.py \
 - Python 3.10+ (for weight conversion and HuggingFace downloads)
 - ffmpeg (for MP4/GIF export)
 
+## GPU Inference
+
+The transformer can run on GPU for faster denoising. By default, the downloaded libtorch is CPU-only. For GPU support:
+
+### Option 1: Download CUDA libtorch (recommended)
+
+```bash
+# Download CUDA 12.1 libtorch
+wget https://download.pytorch.org/libtorch/cu121/libtorch-cxx11-abi-shared-with-deps-2.3.0%2Bcu121.zip
+unzip libtorch-cxx11-abi-shared-with-deps-2.3.0+cu121.zip -d /opt/libtorch
+
+# Set environment variables
+export LIBTORCH=/opt/libtorch
+export LD_LIBRARY_PATH=/opt/libtorch/lib:$LD_LIBRARY_PATH
+
+# Run on GPU
+cargo run --release --bin ltx-inference -- --weights weights/ltx-video-2b-v0.9.1-rust.safetensors --device cuda --steps 20
+```
+
+### Option 2: Use system CUDA toolkit
+
+```bash
+# If CUDA is installed at /usr/local/cuda
+export LIBTORCH=/usr/local/cuda
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+cargo run --release --bin ltx-inference -- --device cuda --steps 20
+```
+
+### GPU Detection
+
+The CLI auto-detects CUDA availability:
+- `--device cuda` — uses GPU 0, falls back to CPU if CUDA unavailable
+- `--device cuda:1` — uses GPU 1
+- `--device cpu` — always uses CPU
+
+### GPU Requirements
+
+| Model | RAM (CPU) | VRAM (GPU) |
+|-------|-----------|------------|
+| Transformer (2B) | ~6 GB | ~6 GB |
+| T5 text encoder (XXL) | ~9 GB (mmap) | ~9 GB |
+| Both combined | ~15 GB | ~15 GB |
+
 ## SSOT Enforcement
 
 Every constant, type, and function has exactly ONE definition. Violations are caught at compile time.

@@ -114,11 +114,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         egui::ComboBox::from_id_salt("device")
             .selected_text(state.device.label())
             .show_ui(ui, |ui| {
-                for &kind in DeviceKind::ALL {
+                for &kind in DeviceKind::all_available() {
                     ui.selectable_value(&mut state.device, kind, kind.label());
                 }
             });
-        ui.label("?").on_hover_text("CPU: always works. CUDA: requires NVIDIA GPU with enough VRAM.");
+        ui.label("?").on_hover_text("CPU: always works. CUDA: requires NVIDIA GPU with CUDA libtorch installed. See README for setup.");
     });
     ui.add_space(8.0);
 

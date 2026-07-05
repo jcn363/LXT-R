@@ -37,12 +37,20 @@ pub enum DeviceKind {
 }
 
 impl DeviceKind {
-    pub const ALL: &'static [DeviceKind] = &[DeviceKind::Cpu, DeviceKind::Cuda];
+    pub fn all_available() -> &'static [DeviceKind] {
+        if tch::Cuda::is_available() {
+            &[DeviceKind::Cpu, DeviceKind::Cuda]
+        } else {
+            &[DeviceKind::Cpu]
+        }
+    }
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Cpu => "CPU",
-            Self::Cuda => "CUDA",
+            Self::Cuda => {
+                if tch::Cuda::is_available() { "CUDA ✓" } else { "CUDA (unavailable)" }
+            }
         }
     }
 }

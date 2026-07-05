@@ -94,9 +94,22 @@ fn parse_device(s: &str) -> Device {
         "cpu" => Device::Cpu,
         s if s.starts_with("cuda:") => {
             let id: usize = s.trim_start_matches("cuda:").parse().unwrap_or(0);
-            Device::Cuda(id)
+            let device = Device::Cuda(id);
+            if !tch::Cuda::is_available() {
+                eprintln!("warning: CUDA not available, falling back to CPU");
+                Device::Cpu
+            } else {
+                device
+            }
         }
-        "cuda" => Device::Cuda(0),
+        "cuda" => {
+            if tch::Cuda::is_available() {
+                Device::Cuda(0)
+            } else {
+                eprintln!("warning: CUDA not available, falling back to CPU");
+                Device::Cpu
+            }
+        }
         _ => {
             eprintln!("warning: unknown device '{s}', falling back to CPU");
             Device::Cpu
