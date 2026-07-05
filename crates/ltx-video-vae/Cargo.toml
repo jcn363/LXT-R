@@ -8,6 +8,7 @@ ltx-types = { path = "../ltx-types" }
 ltx-norm = { path = "../ltx-norm" }
 ltx-conv = { path = "../ltx-conv" }
 ltx-resblock = { path = "../ltx-resblock" }
+ltx-timestep = { path = "../ltx-timestep" }
 tch = { workspace = true }
 serde = { workspace = true }
 

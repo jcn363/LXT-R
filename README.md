@@ -370,13 +370,13 @@ crates/
 - CLI with full argument support
 
 ### Known Limitations
-- **VAE decoder** — Decoder architecture mismatch with Python model (7 up_blocks vs 4 in Rust). Needs architecture alignment.
+- **VAE decoder** — Rewritten to match Python checkpoint structure (7 up_blocks with timestep-conditioned AdaLN resblocks, ConvUpsample blocks, last_time_embedder). Weights load correctly. Full forward pass needs end-to-end verification with encoder+decoder roundtrip.
 - **VAE encoder** — Rewritten to match Python architecture (10 blocks, r=4 space_to_depth, 128-ch latent). img2img uses proper VAE encoding when `--vae-weights` is provided.
 - **Resolution** — 32x32 works with 8 steps on 32GB RAM. Higher resolutions require GPU or model sharding.
 - **56 skipped weights** — Cross-attention K/V projections use context_dim=4096 (T5) but were trained with 2048 (Gemma3).
 
 ### Not Yet Implemented
-1. **VAE decoder alignment** — Align Rust decoder architecture with Python model's 7-block structure
+1. **VAE decoder alignment** — ~~Align Rust decoder architecture with Python model's 7-block structure~~ DONE: 7 up_blocks with timestep-conditioned AdaLN resblocks, ConvUpsample blocks, last_time_embedder, last_scale_shift_table
 2. **Model sharding** — Split model across CPU/GPU for larger resolutions
 3. **Audio pipeline** — Audio VAE + transformer for audio generation
 4. **Full GPU inference** — Move transformer to GPU for faster denoising

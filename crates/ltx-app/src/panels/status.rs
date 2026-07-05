@@ -27,7 +27,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) {
                 .on_hover_text(format!("Width × Height × Frames ({} total pixels)", state.width * state.height * state.frames_display.len() as i64));
         } else {
             ui.label(format!("{}×{}×{}", state.width, state.height, state.frames))
-                .on_hover_text(format!("Width × Height × Frames"));
+                .on_hover_text("Width × Height × Frames".to_string());
         }
     });
 }

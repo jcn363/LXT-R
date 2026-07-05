@@ -780,7 +780,7 @@ fn save_gif(x: &Tensor, frames: i64, h: i64, w: i64, output: &std::path::Path) -
         }
     }
 
-    let filter = format!("scale=256:256:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse");
+    let filter = "scale=256:256:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse".to_string();
     let status = std::process::Command::new("ffmpeg")
         .args(["-y", "-framerate", "8", "-i", tmp_dir.join("frame_%04d.pgm").to_str().unwrap_or(""), "-vf", &filter, "-loop", "0", output.to_str().unwrap_or("")])
         .status()

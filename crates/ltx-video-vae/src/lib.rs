@@ -8,20 +8,16 @@ pub mod decoder_blocks;
 pub mod encoder_blocks;
 pub mod sampling;
 
-use std::borrow::Borrow;
-
 use tch::nn::{ModuleT, Path};
 use tch::Tensor;
 
 use ltx_conv::make_conv_nd;
-use ltx_norm::build_norm_layer;
-use ltx_resblock::{make_resblock, UNetMidBlock3D};
+use ltx_timestep::get_timestep_embedding;
 use ltx_types::NormLayerType;
 
 use sampling::{depth_to_space, space_to_depth};
 
-pub use configurator::{from_config, default_encoder_block_descs, VideoVAEConfig};
-pub use decoder_blocks::make_decoder_block;
+pub use configurator::default_encoder_block_descs;
 
 use encoder_blocks::EncoderStage;
 
@@ -66,6 +62,7 @@ pub enum EncoderBlockKind {
 }
 
 impl VideoEncoder {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         vs: &tch::nn::Path,
         conv_in_channels: i64,   // 48 (from space_to_depth r=4)
@@ -169,18 +166,50 @@ impl ModuleT for VideoEncoder {
 }
 
 // ---------------------------------------------------------------------------
-// VideoDecoder
+// VideoDecoder — matches Python LTX-Video checkpoint architecture
 // ---------------------------------------------------------------------------
 
-/// Video VAE decoder: latent-space 5D tensor → pixel-space 5D tensor.
+use decoder_blocks::{DecoderResBlock, ConvUpsample, TimestepEmbedding};
+
+/// Per-resblock data: the resblock itself + its scale_shift_table parameter.
+struct ResBlockWithMod {
+    block: DecoderResBlock,
+    scale_shift_table: Tensor, // [4, C]
+}
+
+/// Per-stage data: time_embedder + resblocks + scale_shift_tables.
+struct ResBlockStage {
+    time_embedder: TimestepEmbedding,
+    resblocks: Vec<ResBlockWithMod>,
+}
+
+/// Video VAE decoder with timestep conditioning.
+///
+/// Architecture (from `ltx-video-2b-v0.9.1.safetensors`):
+/// - `conv_in`: 128 → 1024
+/// - 7 up_blocks (alternating ResBlock stages + ConvUpsample):
+///   - Block 0: 8 DecoderResBlocks (ch=1024) + time_embedder
+///   - Block 1: ConvUpsample 1024 → 4096
+///   - Block 2: 7 DecoderResBlocks (ch=512) + time_embedder
+///   - Block 3: ConvUpsample 512 → 2048
+///   - Block 4: 6 DecoderResBlocks (ch=256) + time_embedder
+///   - Block 5: ConvUpsample 256 → 1024
+///   - Block 6: 5 DecoderResBlocks (ch=128) + time_embedder
+/// - `last_time_embedder` + `last_scale_shift_table`
+/// - `conv_out`: 128 → 48 → depth_to_space(r=4) → 3 RGB
 pub struct VideoDecoder {
     conv_in: Box<dyn ModuleT>,
-    mid: UNetMidBlock3D,
-    up_convs: Vec<Box<dyn ModuleT>>,
-    up_resblocks: Vec<Vec<Box<dyn ModuleT>>>,
-    conv_norm_out: Box<dyn ModuleT>,
+    // Timestep
+    timestep_scale_multiplier: Tensor,
+    sinusoidal_dim: i64,
+    // 4 ResBlock stages (blocks 0, 2, 4, 6)
+    stages: Vec<ResBlockStage>,
+    // 3 ConvUpsample blocks (blocks 1, 3, 5)
+    conv_upsamples: Vec<ConvUpsample>,
+    // Final timestep components
+    last_time_embedder: TimestepEmbedding,
+    last_scale_shift_table: Tensor, // [2, 128]
     conv_out: Box<dyn ModuleT>,
-    spatial_upsample_factor: i64,
 }
 
 impl std::fmt::Debug for VideoDecoder {
@@ -191,128 +220,128 @@ impl std::fmt::Debug for VideoDecoder {
 
 impl VideoDecoder {
     #[allow(clippy::too_many_arguments)]
-    pub fn new<'a>(
-        vs: impl Borrow<Path<'a>>,
-        latent_channels: i64,
-        base_channels: i64,
-        channel_multipliers: &[i64],
-        num_res_blocks: i64,
-        in_channels: i64,
-        norm_num_groups: i64,
-        causal: bool,
+    pub fn new(
+        vs: &Path,
+        in_channels: i64,       // 128 (sampled latent)
+        base_channels: i64,     // 1024
         norm_type: NormLayerType,
+        norm_groups: i64,
+        causal: bool,
     ) -> Self {
-        let vs = vs.borrow();
+        let conv_in = make_conv_nd(vs / "conv_in", 3, in_channels, base_channels, 3, 1, 1, causal, "zeros");
 
-        let last_mult = *channel_multipliers
-            .last()
-            .expect("channel_multipliers should not be empty");
-        let mid_channels = base_channels * last_mult;
+        let timestep_scale_multiplier = vs.var("timestep_scale_multiplier", &[], tch::nn::init::Init::Const(1.0));
 
-        let conv_in = make_conv_nd(
-            vs / "conv_in",
-            3,
-            latent_channels,
-            mid_channels,
-            3,
-            1,
-            1,
-            causal,
-            "zeros",
-        );
+        let sinusoidal_dim = 256i64;
 
-        let mid = UNetMidBlock3D::new(
-            vs / "mid",
-            mid_channels,
-            norm_type,
-            norm_num_groups,
-            causal,
-            1,
-        );
+        // Build 4 ResBlock stages
+        let stage_descs: &[(usize, i64)] = &[(0, 1024), (2, 512), (4, 256), (6, 128)];
+        let resblock_counts: &[i64] = &[8, 7, 6, 5];
+        let time_embed_out_dims: &[i64] = &[4096, 2048, 1024, 512]; // 4*C
 
-        let mut up_convs = Vec::new();
-        let mut up_resblocks = Vec::new();
-
-        for (i, &mult) in channel_multipliers.iter().enumerate().rev() {
-            let ch = base_channels * mult;
-            let next_ch = if i == 0 {
-                base_channels
-            } else {
-                base_channels * channel_multipliers[i - 1]
-            };
-
-            let block = decoder_blocks::make_decoder_block(
-                vs / format!("up_{i}"),
-                ch,
-                next_ch,
-                1,
-                norm_type,
-                norm_num_groups,
-                causal,
+        let mut stages = Vec::new();
+        for (s, (&(block_idx, ch), &n_res)) in stage_descs.iter().zip(resblock_counts.iter()).enumerate() {
+            let te = TimestepEmbedding::new(
+                &(vs / format!("up_blocks.{block_idx}")),
+                sinusoidal_dim,
+                time_embed_out_dims[s],
             );
-
-            let mut resblock_group = Vec::new();
-            for j in 0..num_res_blocks {
-                resblock_group.push(make_resblock(
-                    3,
-                    next_ch,
-                    next_ch,
-                    norm_type,
-                    norm_num_groups,
-                    causal,
-                    vs / format!("up_{i}") / "resblocks" / j,
-                ));
+            let mut resblocks = Vec::new();
+            for j in 0..n_res {
+                let rb = DecoderResBlock::new(
+                    &(vs / format!("up_blocks.{block_idx}.res_blocks.{j}")),
+                    ch, norm_type, norm_groups, causal,
+                );
+                let ss = vs.var(
+                    &format!("up_blocks.{block_idx}.res_blocks.{j}.scale_shift_table"),
+                    &[4, ch],
+                    tch::nn::init::Init::Const(0.0),
+                );
+                resblocks.push(ResBlockWithMod { block: rb, scale_shift_table: ss });
             }
-
-            up_convs.push(block.conv);
-            up_resblocks.push(resblock_group);
+            stages.push(ResBlockStage { time_embedder: te, resblocks });
         }
 
-        let conv_norm_out = build_norm_layer(norm_type, base_channels, norm_num_groups);
-        let conv_out = make_conv_nd(
-            vs / "conv_out",
-            3,
-            base_channels,
-            in_channels * 4,
-            3,
-            1,
-            1,
-            causal,
-            "zeros",
-        );
+        // Build 3 ConvUpsample blocks
+        let conv_descs: &[(usize, i64, i64)] = &[(1, 1024, 4096), (3, 512, 2048), (5, 256, 1024)];
+        let conv_upsamples: Vec<ConvUpsample> = conv_descs.iter()
+            .map(|&(block_idx, in_ch, out_ch)| {
+                ConvUpsample::new(
+                    &(vs / format!("up_blocks.{block_idx}")),
+                    in_ch, out_ch, norm_type, norm_groups, causal,
+                )
+            })
+            .collect();
+
+        let last_time_embedder = TimestepEmbedding::new(vs, sinusoidal_dim, 128);
+        let last_scale_shift_table = vs.var("last_scale_shift_table", &[2, 128], tch::nn::init::Init::Const(0.0));
+        let conv_out = make_conv_nd(vs / "conv_out", 3, 128, 48, 3, 1, 1, causal, "zeros");
 
         Self {
             conv_in,
-            mid,
-            up_convs,
-            up_resblocks,
-            conv_norm_out,
+            timestep_scale_multiplier,
+            sinusoidal_dim,
+            stages,
+            conv_upsamples,
+            last_time_embedder,
+            last_scale_shift_table,
             conv_out,
-            spatial_upsample_factor: 2,
         }
     }
 
-    pub fn forward(&self, x: &Tensor) -> Tensor {
-        let mut x = self.conv_in.forward_t(x, false);
+    /// Decode latent to pixel space with timestep conditioning.
+    ///
+    /// `x`: `[B, 128, T, H, W]` latent
+    /// `timestep`: scalar diffusion timestep
+    pub fn forward(&self, x: &Tensor, timestep: &Tensor) -> Tensor {
+        let t = get_timestep_embedding(timestep, self.sinusoidal_dim, 10000) * &self.timestep_scale_multiplier;
+        let mut h = self.conv_in.forward_t(x, false);
 
-        x = self.mid.forward(&x);
+        let mut stage_idx = 0;
+        for block_idx in 0..7 {
+            if block_idx % 2 == 0 {
+                // ResBlock stage with timestep conditioning
+                let stage = &self.stages[stage_idx];
+                let ch = stage.resblocks[0].scale_shift_table.size()[1];
 
-        for (i, conv) in self.up_convs.iter().enumerate() {
-            x = conv.forward_t(&x, false);
-            for resblock in &self.up_resblocks[i] {
-                x = resblock.forward_t(&x, false);
+                // Embed timestep: [B, 256] -> [B, 4*C] -> [B, 4, C]
+                let t_emb = stage.time_embedder.forward(&t);
+                let t_emb = t_emb.reshape([t_emb.size()[0], 4, ch]);
+
+                for rb in &stage.resblocks {
+                    // modulated = scale_shift_table [4, C] + t_emb [B, 4, C]
+                    let modulated = &rb.scale_shift_table + &t_emb; // [B, 4, C]
+                    h = rb.block.forward_modulated(&h, &modulated);
+                }
+                stage_idx += 1;
+            } else {
+                // ConvUpsample
+                let cu_idx = (block_idx - 1) / 2;
+                h = self.conv_upsamples[cu_idx].forward(&h);
+                h = depth_to_space(&h, 2);
             }
-            x = depth_to_space(&x, self.spatial_upsample_factor);
         }
 
-        let h = self.conv_norm_out.forward_t(&x, false).silu();
-        self.conv_out.forward_t(&h, false)
+        // last_time_embedder + last_scale_shift_table modulation
+        let t_last = self.last_time_embedder.forward(&t);
+        let last_mod = &self.last_scale_shift_table + &t_last.unsqueeze(1);
+        let chunks = last_mod.chunk(2, 1);
+        let shift = &chunks[0];
+        let scale = &chunks[1];
+        // Apply to the final 128-ch output: we need GroupNorm here
+        // But the checkpoint has no norm after the last resblock stage.
+        // The modulated norm is applied: h * (1 + scale) + shift
+        h = h * (1.0 + scale) + shift;
+
+        let h = h.silu();
+        let h = self.conv_out.forward_t(&h, false);
+        depth_to_space(&h, 4)
     }
 }
 
 impl ModuleT for VideoDecoder {
     fn forward_t(&self, xs: &Tensor, _train: bool) -> Tensor {
-        self.forward(xs)
+        self.forward(xs, &Tensor::zeros([], (tch::Kind::Float, xs.device())))
     }
 }
 
@@ -336,66 +365,25 @@ impl std::fmt::Debug for VideoVAE {
 }
 
 impl VideoVAE {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new<'a>(
-        vs: impl Borrow<Path<'a>>,
-        conv_in_channels: i64,   // 48 — from space_to_depth(r=4)
-        base_channels: i64,
-        block_descs: &[EncoderBlockDesc],
-        conv_out_channels: i64,  // 129 — mean(64) + logvar(64) + scale(1)
-        norm_type: NormLayerType,
-        norm_groups: i64,
-        causal: bool,
-        // Decoder still uses the old channel_multipliers layout
-        channel_multipliers: &[i64],
-        num_res_blocks: i64,
-        latent_channels: i64,
-        in_channels: i64,
+    pub fn new_encoder_decoder(
+        encoder: VideoEncoder,
+        decoder: VideoDecoder,
         spatial_downsample_factor: i64,
     ) -> Self {
-        let vs = vs.borrow();
-
-        let encoder = VideoEncoder::new(
-            &(vs / "encoder"),
-            conv_in_channels,
-            base_channels,
-            block_descs,
-            conv_out_channels,
-            norm_type,
-            norm_groups,
-            causal,
-        );
-
-        let decoder = VideoDecoder::new(
-            vs / "decoder",
-            latent_channels,
-            base_channels,
-            channel_multipliers,
-            num_res_blocks,
-            in_channels,
-            norm_groups,
-            causal,
-            norm_type,
-        );
-
-        Self {
-            encoder,
-            decoder,
-            spatial_downsample_factor,
-        }
+        Self { encoder, decoder, spatial_downsample_factor }
     }
 
     pub fn encode(&self, x: &Tensor) -> Tensor {
         self.encoder.forward(x)
     }
 
-    pub fn decode(&self, x: &Tensor) -> Tensor {
-        self.decoder.forward(x)
+    pub fn decode(&self, x: &Tensor, timestep: &Tensor) -> Tensor {
+        self.decoder.forward(x, timestep)
     }
 
-    pub fn forward(&self, x: &Tensor) -> Tensor {
+    pub fn forward(&self, x: &Tensor, timestep: &Tensor) -> Tensor {
         let latent = self.encode(x);
-        self.decode(&latent)
+        self.decode(&latent, timestep)
     }
 
     pub fn spatial_downsample_factor(&self) -> i64 {
@@ -405,6 +393,7 @@ impl VideoVAE {
 
 impl ModuleT for VideoVAE {
     fn forward_t(&self, xs: &Tensor, _train: bool) -> Tensor {
-        self.forward(xs)
+        // Default timestep = 0 for ModuleT trait compatibility
+        self.forward(xs, &Tensor::zeros([], (tch::Kind::Float, xs.device())))
     }
 }

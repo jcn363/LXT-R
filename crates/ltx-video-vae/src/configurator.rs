@@ -1,42 +1,19 @@
-use std::borrow::Borrow;
-
-use serde::Deserialize;
 use tch::nn::Path;
 
-use ltx_types::{NormLayerType, VAE_NORM_NUM_GROUPS};
+use ltx_types::NormLayerType;
 
 use crate::{
     EncoderBlockDesc, EncoderBlockKind, VideoDecoder, VideoEncoder, VideoVAE,
 };
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct VideoVAEConfig {
-    pub in_channels: i64,
-    pub base_channels: i64,
-    pub channel_multipliers: Vec<i64>,
-    pub num_res_blocks: i64,
-    pub latent_channels: i64,
-    #[serde(default = "default_norm_groups")]
-    pub norm_num_groups: i64,
-    #[serde(default)]
-    pub causal: bool,
-    #[serde(default = "default_norm_type")]
-    pub norm_type: NormLayerType,
-    #[serde(default = "default_spatial_downsample")]
-    pub spatial_downsample_factor: i64,
-}
+/// space_to_depth ratio for RGB input: r=4 gives 3*4*4 = 48 input channels.
+pub const SPACE_TO_DEPTH_R: i64 = 4;
+pub const CONV_IN_CHANNELS: i64 = 3 * SPACE_TO_DEPTH_R * SPACE_TO_DEPTH_R; // 48
 
-fn default_norm_groups() -> i64 {
-    VAE_NORM_NUM_GROUPS
-}
-
-fn default_norm_type() -> NormLayerType {
-    NormLayerType::Group
-}
-
-fn default_spatial_downsample() -> i64 {
-    8
-}
+/// Encoder conv_out outputs 129 channels (128 sampled latent + 1 scale).
+pub const ENCODER_CONV_OUT_CHANNELS: i64 = 129;
+/// Latent channels after sampling (first 128 of 129).
+pub const SAMPLED_LATENT_CHANNELS: i64 = 128;
 
 /// Default encoder block descriptors matching the Python LTX-Video VAE.
 ///
@@ -67,47 +44,36 @@ pub fn default_encoder_block_descs() -> Vec<EncoderBlockDesc> {
     ]
 }
 
-/// conv_in_channels after space_to_depth with r=4 on 3-channel RGB.
-pub const SPACE_TO_DEPTH_R: i64 = 4;
-pub const CONV_IN_CHANNELS: i64 = 3 * SPACE_TO_DEPTH_R * SPACE_TO_DEPTH_R; // 48
-/// conv_out_channels for the encoder (129 = 128 sampled latent + 1 scale).
-pub const ENCODER_CONV_OUT_CHANNELS: i64 = 129;
-/// Latent channels after sampling (mean from the first 128 of 129).
-pub const SAMPLED_LATENT_CHANNELS: i64 = 128;
-
-/// Build `VideoVAE` from a config. This is the ONLY configurator for the
-/// video VAE — it wires the encoder and decoder from the same config.
-pub fn from_config<'a>(config: &VideoVAEConfig, vs: impl Borrow<Path<'a>>) -> VideoVAE {
-    let vs = vs.borrow();
-
+/// Build encoder from config — the only place encoder construction happens.
+pub fn build_encoder(vs: &Path, norm_type: NormLayerType, norm_groups: i64, causal: bool) -> VideoEncoder {
     let block_descs = default_encoder_block_descs();
-
-    let encoder = VideoEncoder::new(
-        &(vs / "encoder"),
-        CONV_IN_CHANNELS,       // 48 — from space_to_depth(r=4)
-        config.base_channels,
+    VideoEncoder::new(
+        vs,
+        CONV_IN_CHANNELS,
+        128, // base_channels
         &block_descs,
-        ENCODER_CONV_OUT_CHANNELS, // 129 — raw conv_out before sampling
-        config.norm_type,
-        config.norm_num_groups,
-        config.causal,
-    );
+        ENCODER_CONV_OUT_CHANNELS,
+        norm_type,
+        norm_groups,
+        causal,
+    )
+}
 
-    let decoder = VideoDecoder::new(
-        vs / "decoder",
-        SAMPLED_LATENT_CHANNELS, // 128 — decoder takes sampled latent, not raw conv_out
-        config.base_channels,
-        &config.channel_multipliers,
-        config.num_res_blocks,
-        config.in_channels,
-        config.norm_num_groups,
-        config.causal,
-        config.norm_type,
-    );
+/// Build decoder from config — the only place decoder construction happens.
+pub fn build_decoder(vs: &Path, norm_type: NormLayerType, norm_groups: i64, causal: bool) -> VideoDecoder {
+    VideoDecoder::new(
+        vs,
+        SAMPLED_LATENT_CHANNELS, // 128 — decoder takes sampled latent
+        1024,                     // base_channels (first resblock stage)
+        norm_type,
+        norm_groups,
+        causal,
+    )
+}
 
-    VideoVAE {
-        encoder,
-        decoder,
-        spatial_downsample_factor: config.spatial_downsample_factor,
-    }
+/// Build full VideoVAE from VarStore root.
+pub fn build_video_vae(vs: &Path, norm_type: NormLayerType, norm_groups: i64, causal: bool) -> VideoVAE {
+    let encoder = build_encoder(&(vs / "encoder"), norm_type, norm_groups, causal);
+    let decoder = build_decoder(&(vs / "decoder"), norm_type, norm_groups, causal);
+    VideoVAE::new_encoder_decoder(encoder, decoder, 32)
 }
