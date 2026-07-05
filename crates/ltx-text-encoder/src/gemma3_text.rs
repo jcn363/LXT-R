@@ -4,7 +4,7 @@ use tch::nn::{Linear, ModuleT, Path};
 use tch::Tensor;
 
 use ltx_attention::{
-    apply_rotary_emb, precompute_freqs_cis, scaled_dot_product_attention, RopeType,
+    precompute_freqs_cis, scaled_dot_product_attention, RopeType,
 };
 use ltx_norm::RMSNorm;
 
@@ -104,7 +104,7 @@ impl Gemma3Attention {
         }
     }
 
-    fn forward(&self, x: &Tensor, cos: &Tensor, sin: &Tensor) -> Tensor {
+    fn forward(&self, x: &Tensor, _cos: &Tensor, _sin: &Tensor) -> Tensor {
         let b = x.size()[0];
         let seq_len = x.size()[1];
 
