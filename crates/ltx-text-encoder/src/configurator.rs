@@ -1,7 +1,7 @@
 use ltx_types::{NORM_EPS, ROPE_THETA};
 
-use crate::config::LTXVTextEncoderConfig;
-use crate::encoder::GemmaTextEncoder;
+use crate::config::{LTXVTextEncoderConfig, T5ConfigData};
+use crate::encoder::{GemmaTextEncoder, T5TextEncoder};
 use crate::tokenizer::LTXVGemmaTokenizer;
 
 /// Build a GemmaTextEncoder from configuration data.
@@ -13,6 +13,35 @@ pub fn from_config(
 ) -> Result<GemmaTextEncoder, Box<dyn std::error::Error + Send + Sync>> {
     let tokenizer = LTXVGemmaTokenizer::from_file(tokenizer_path, config.max_text_length as usize)?;
     Ok(GemmaTextEncoder::new(vs, config, tokenizer))
+}
+
+/// Build a T5TextEncoder from configuration data.
+pub fn from_config_t5(
+    vs: &tch::nn::Path,
+    config: &T5ConfigData,
+    tokenizer_path: &str,
+    max_text_length: i64,
+) -> Result<T5TextEncoder, Box<dyn std::error::Error + Send + Sync>> {
+    let tokenizer = LTXVGemmaTokenizer::from_file(tokenizer_path, max_text_length as usize)?;
+    Ok(T5TextEncoder::new(vs, config, tokenizer, max_text_length))
+}
+
+/// Create a default T5 configuration matching T5-XXL.
+pub fn default_t5_config() -> T5ConfigData {
+    T5ConfigData {
+        d_model: 4096,
+        d_ff: 10240,
+        d_kv: 64,
+        num_heads: 64,
+        num_layers: 24,
+        vocab_size: 32128,
+        layer_norm_epsilon: NORM_EPS,
+        dropout_rate: 0.1,
+        relative_attention_num_buckets: 32,
+        relative_attention_max_distance: 128,
+        is_gated_act: true,
+        dense_act_fn: String::from("gelu_new"),
+    }
 }
 
 /// Create a default configuration matching the LTX-V Gemma3-12B + SigLIP-L setup.

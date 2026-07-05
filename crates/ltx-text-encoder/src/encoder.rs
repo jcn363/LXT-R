@@ -11,6 +11,7 @@ use crate::gemma3_text::Gemma3TextModel;
 use crate::image_processor::ImageProcessor;
 use crate::prompt_enhancement::PromptEnhancer;
 use crate::siglip::SigLIPVisionTower;
+use crate::t5_encoder::T5EncoderModel;
 use crate::tokenizer::LTXVGemmaTokenizer;
 
 pub struct GemmaTextEncoder {
@@ -111,5 +112,54 @@ impl GemmaTextEncoder {
 
     pub fn max_text_length(&self) -> i64 {
         self.max_text_length
+    }
+}
+
+/// T5 text encoder for LTX-Video — text-only, no vision.
+pub struct T5TextEncoder {
+    model: T5EncoderModel,
+    tokenizer: LTXVGemmaTokenizer,
+    max_text_length: i64,
+}
+
+impl T5TextEncoder {
+    pub fn new<'a>(
+        vs: impl Borrow<Path<'a>>,
+        config: &crate::config::T5ConfigData,
+        tokenizer: LTXVGemmaTokenizer,
+        max_text_length: i64,
+    ) -> Self {
+        let vs = vs.borrow();
+        let model = T5EncoderModel::new(vs, config);
+        Self {
+            model,
+            tokenizer,
+            max_text_length,
+        }
+    }
+
+    /// Encode text to hidden states using T5.
+    /// Returns: [B, seq_len, d_model]
+    pub fn encode(&self, text: &str) -> Tensor {
+        let ids = self.tokenizer.encode(text).unwrap_or_default();
+        let ids: Vec<i64> = ids.into_iter().take(self.max_text_length as usize).collect();
+        let input_ids = Tensor::from_slice(&ids).unsqueeze(0);
+        self.model.forward(&input_ids)
+    }
+
+    pub fn encode_ids(&self, input_ids: &Tensor) -> Tensor {
+        self.model.forward(input_ids)
+    }
+
+    pub fn hidden_size(&self) -> i64 {
+        self.model.hidden_size()
+    }
+
+    pub fn max_text_length(&self) -> i64 {
+        self.max_text_length
+    }
+
+    pub fn tokenizer(&self) -> &LTXVGemmaTokenizer {
+        &self.tokenizer
     }
 }

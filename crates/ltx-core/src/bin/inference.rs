@@ -13,11 +13,35 @@ use ltx_components::{EulerStep, Ltx2Scheduler, CFG};
 use ltx_norm::RMSNorm;
 use ltx_patchify::{patchify_5d, unpatchify_5d};
 use ltx_text_encoder::configurator;
+use ltx_text_encoder::encoder::{GemmaTextEncoder, T5TextEncoder};
 use ltx_transformer::block::BasicAVTransformerBlock;
 use ltx_transformer::model::LTXModel;
 use ltx_types::{Guider, Scheduler, STABILITY_EPS};
 use tch::nn::ModuleT;
 use tch::{Device, Kind, Tensor};
+
+enum TextEncoderState {
+    T5(T5TextEncoder),
+    Gemma3(GemmaTextEncoder),
+}
+
+impl TextEncoderState {
+    fn from_gemma(enc: GemmaTextEncoder) -> Self { Self::Gemma3(enc) }
+
+    fn encode(&self, text: &str) -> Tensor {
+        match self {
+            Self::T5(enc) => enc.encode(text),
+            Self::Gemma3(enc) => enc.encode(text),
+        }
+    }
+
+    fn hidden_size(&self) -> i64 {
+        match self {
+            Self::T5(enc) => enc.hidden_size(),
+            Self::Gemma3(enc) => enc.hidden_size(),
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "ltx-inference", about = "LTX-2.3 video diffusion inference")]
@@ -109,24 +133,60 @@ fn main() {
     }
 
     // Build text encoder if tokenizer + text weights provided
-    let text_encoder = match (&args.tokenizer, &args.text_weights) {
+    // Auto-detect T5 vs Gemma3 from checkpoint keys
+    let text_encoder_hidden = match (&args.tokenizer, &args.text_weights) {
         (Some(tok_path), Some(tw_path)) => {
             eprintln!("loading text encoder...");
-            let config = configurator::default_config();
-            let encoder_vs = tch::nn::VarStore::new(Device::Cpu);
-            let encoder = match configurator::from_config(&encoder_vs.root(), &config, tok_path) {
-                Ok(enc) => enc,
-                Err(e) => {
-                    eprintln!("error: text encoder init failed: {e}");
+            let tw_path_str = tw_path.as_str();
+            // Detect T5 vs Gemma3 by checking if checkpoint has "encoder.block." keys
+            let is_t5 = {
+                let data = std::fs::read(tw_path).unwrap_or_default();
+                let is_t5 = if let Ok(st) = safetensors::SafeTensors::deserialize(&data) {
+                    st.tensors().iter().any(|(k, _)| k.starts_with("encoder.block."))
+                } else {
+                    false
+                };
+                is_t5
+            };
+
+            if is_t5 {
+                eprintln!("detected T5 text encoder");
+                let config = configurator::default_t5_config();
+                let encoder_vs = tch::nn::VarStore::new(Device::Cpu);
+                let encoder = match configurator::from_config_t5(&encoder_vs.root(), &config, tok_path, 512) {
+                    Ok(enc) => enc,
+                    Err(e) => {
+                        eprintln!("error: T5 encoder init failed: {e}");
+                        process::exit(1);
+                    }
+                };
+                if let Err(e) = load_weights(&encoder_vs, tw_path_str) {
+                    eprintln!("error: text weights: {e}");
                     process::exit(1);
                 }
-            };
-            if let Err(e) = load_weights(&encoder_vs, tw_path) {
-                eprintln!("error: text weights: {e}");
-                process::exit(1);
+                let hidden = encoder.hidden_size();
+                eprintln!("T5 encoder: {hidden} hidden");
+                // Store for context encoding
+                Some((encoder_vs, TextEncoderState::T5(encoder)))
+            } else {
+                eprintln!("detected Gemma3 text encoder");
+                let config = configurator::default_config();
+                let encoder_vs = tch::nn::VarStore::new(Device::Cpu);
+                let encoder = match configurator::from_config(&encoder_vs.root(), &config, tok_path) {
+                    Ok(enc) => enc,
+                    Err(e) => {
+                        eprintln!("error: text encoder init failed: {e}");
+                        process::exit(1);
+                    }
+                };
+                if let Err(e) = load_weights(&encoder_vs, tw_path_str) {
+                    eprintln!("error: text weights: {e}");
+                    process::exit(1);
+                }
+                let hidden = encoder.hidden_size();
+                eprintln!("Gemma3 encoder: {hidden} hidden");
+                Some((encoder_vs, TextEncoderState::from_gemma(encoder)))
             }
-            eprintln!("text encoder: {} hidden, {} max_len", encoder.hidden_size(), encoder.max_text_length());
-            Some((encoder_vs, encoder))
         }
         (Some(_), None) => {
             eprintln!("warning: --tokenizer requires --text-weights, ignoring tokenizer");
@@ -136,8 +196,9 @@ fn main() {
     };
 
     let n_params: usize = vs.variables().values().map(|t| t.numel()).sum();
+    let text_dim = text_encoder_hidden.as_ref().map(|e| e.1.hidden_size()).unwrap_or(dim);
     eprintln!(
-        "init: {dim}d, {num_layers} layers, {:.1}M params",
+        "init: {dim}d, {num_layers} layers, {:.1}M params, context_dim={text_dim}",
         n_params as f64 / 1e6
     );
 
@@ -145,7 +206,7 @@ fn main() {
     let mut x = Tensor::randn([b, c, args.frames, args.height, args.width], (Kind::Float, Device::Cpu));
 
     // Encode prompt to context
-    let context = if let Some((ref _encoder_vs, ref encoder)) = text_encoder {
+    let context = if let Some((ref _encoder_vs, ref encoder)) = text_encoder_hidden {
         let encoded = encoder.encode(&args.prompt);
         // encoded: [1, seq_len, hidden_size] -> use as context
         let seq_len = encoded.size()[1];
@@ -205,6 +266,8 @@ fn load_weights(vs: &tch::nn::VarStore, path: &str) -> Result<(), String> {
     let mut vars = vs.variables();
 
     for (name, tensor) in vars.iter_mut() {
+        // Try exact match first
+        let mut found = false;
         if let Ok(view) = st.tensor(name) {
             let kind = match view.dtype() {
                 safetensors::Dtype::F16 => tch::Kind::Half,
@@ -213,14 +276,55 @@ fn load_weights(vs: &tch::nn::VarStore, path: &str) -> Result<(), String> {
             };
             let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
             let loaded = Tensor::from_data_size(view.data(), &shape, kind);
-
             if tensor.size() == loaded.size() {
                 tensor.copy_(&loaded);
                 loaded_count += 1;
-            } else {
-                skipped += 1;
+                found = true;
             }
-        } else {
+        }
+
+        // If not found, try converting VarStore name to checkpoint format
+        // VarStore: "block/0/layer/0/SelfAttention/q/weight"
+        // Checkpoint: "encoder.block.0.layer.0.SelfAttention.q.weight"
+        if !found {
+            // Convert slashes to dots and prepend "encoder." for T5
+            let ckpt_name = format!("encoder.{}", name.replace('/', "."));
+            if let Ok(view) = st.tensor(&ckpt_name) {
+                let kind = match view.dtype() {
+                    safetensors::Dtype::F16 => tch::Kind::Half,
+                    safetensors::Dtype::BF16 => tch::Kind::BFloat16,
+                    _ => tch::Kind::Float,
+                };
+                let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
+                let loaded = Tensor::from_data_size(view.data(), &shape, kind);
+                if tensor.size() == loaded.size() {
+                    tensor.copy_(&loaded);
+                    loaded_count += 1;
+                    found = true;
+                }
+            }
+        }
+
+        // Also try without "encoder." prefix but with dots
+        if !found {
+            let ckpt_name = name.replace('/', ".");
+            if let Ok(view) = st.tensor(&ckpt_name) {
+                let kind = match view.dtype() {
+                    safetensors::Dtype::F16 => tch::Kind::Half,
+                    safetensors::Dtype::BF16 => tch::Kind::BFloat16,
+                    _ => tch::Kind::Float,
+                };
+                let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
+                let loaded = Tensor::from_data_size(view.data(), &shape, kind);
+                if tensor.size() == loaded.size() {
+                    tensor.copy_(&loaded);
+                    loaded_count += 1;
+                    found = true;
+                }
+            }
+        }
+
+        if !found {
             skipped += 1;
         }
     }

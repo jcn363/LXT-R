@@ -32,3 +32,27 @@ pub struct LTXVTextEncoderConfig {
     pub siglip: SigLIPConfigData,
     pub max_text_length: i64,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct T5ConfigData {
+    pub d_model: i64,
+    pub d_ff: i64,
+    pub d_kv: i64,
+    pub num_heads: i64,
+    pub num_layers: i64,
+    pub vocab_size: i64,
+    pub layer_norm_epsilon: f64,
+    #[serde(default)]
+    pub dropout_rate: f64,
+    #[serde(default = "default_num_buckets")]
+    pub relative_attention_num_buckets: i64,
+    #[serde(default = "default_max_distance")]
+    pub relative_attention_max_distance: i64,
+    #[serde(default)]
+    pub is_gated_act: bool,
+    #[serde(default)]
+    pub dense_act_fn: String,
+}
+
+fn default_num_buckets() -> i64 { 32 }
+fn default_max_distance() -> i64 { 128 }

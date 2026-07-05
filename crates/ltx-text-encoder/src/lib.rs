@@ -15,7 +15,9 @@ pub mod prompt_enhancement;
 pub mod siglip;
 pub mod tokenizer;
 
-pub use config::{Gemma3ConfigData, LTXVTextEncoderConfig, SigLIPConfigData};
+pub mod t5_encoder;
+
+pub use config::{Gemma3ConfigData, LTXVTextEncoderConfig, SigLIPConfigData, T5ConfigData};
 pub use configurator::{default_config, from_config};
-pub use encoder::GemmaTextEncoder;
+pub use encoder::{GemmaTextEncoder, T5TextEncoder};
 pub use tokenizer::LTXVGemmaTokenizer;

@@ -77,7 +77,7 @@ fn run_inference(
         let encoder_vs = tch::nn::VarStore::new(Device::Cpu);
         let encoder = ltx_text_encoder::configurator::from_config(&encoder_vs.root(), &config, tok_path.to_str().unwrap_or(""))
             .map_err(|e| format!("text encoder init: {e}"))?;
-        load_weights(&encoder_vs, &tw_path)?;
+        load_weights(&encoder_vs, tw_path)?;
         let encoded = encoder.encode(&params.prompt);
         let seq_len = encoded.size()[1];
         let _ = event_tx.send(GuiEvent::Progress { step: 0, total: params.steps, sigma: 0.0 });
