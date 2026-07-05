@@ -20,21 +20,29 @@ use ltx_types::NormLayerType;
 
 use sampling::{depth_to_space, space_to_depth};
 
-pub use configurator::{from_config, VideoVAEConfig};
+pub use configurator::{from_config, default_encoder_block_descs, VideoVAEConfig};
 pub use decoder_blocks::make_decoder_block;
-pub use encoder_blocks::make_encoder_block;
+
+use encoder_blocks::EncoderStage;
 
 // ---------------------------------------------------------------------------
-// VideoEncoder
+// VideoEncoder — matches Python LTX-Video checkpoint architecture
 // ---------------------------------------------------------------------------
 
-/// Video VAE encoder: pixel-space 5D tensor → latent-space 5D tensor.
+/// Video VAE encoder: pixel-space `(B,3,T,H,W)` → latent distribution.
+///
+/// Architecture (from `ltx-video-2b-v0.9.1.safetensors`):
+/// - `space_to_depth(r=4)`: 3 → 48 channels
+/// - `conv_in`: 48 → 128
+/// - 10 heterogeneous `down_blocks`:
+///   - ResBlock stages (0, 3, 6, 8, 9)
+///   - Stride-2 convs (1, 4, 7)
+///   - Channel-change downsamples (2, 5)
+/// - `conv_out`: 512 → 129 (mean 64 + logvar 64 + scale 1)
+/// - No mid block, no conv_norm_out, no timestep conditioning
 pub struct VideoEncoder {
     conv_in: Box<dyn ModuleT>,
-    down_convs: Vec<Box<dyn ModuleT>>,
-    down_resblocks: Vec<Vec<Box<dyn ModuleT>>>,
-    mid: UNetMidBlock3D,
-    conv_norm_out: Box<dyn ModuleT>,
+    blocks: Vec<EncoderStage>,
     conv_out: Box<dyn ModuleT>,
 }
 
@@ -44,126 +52,113 @@ impl std::fmt::Debug for VideoEncoder {
     }
 }
 
-impl VideoEncoder {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new<'a>(
-        vs: impl Borrow<Path<'a>>,
-        in_channels: i64,
-        base_channels: i64,
-        channel_multipliers: &[i64],
-        num_res_blocks: i64,
-        latent_channels: i64,
-        norm_num_groups: i64,
-        causal: bool,
-        norm_type: NormLayerType,
-    ) -> Self {
-        let vs = vs.borrow();
+/// Descriptor for one encoder down-block, used by the config.
+pub struct EncoderBlockDesc {
+    pub kind: EncoderBlockKind,
+    pub in_ch: i64,
+    pub out_ch: i64,
+}
 
+pub enum EncoderBlockKind {
+    ResBlocks(i64),           // num resblocks
+    DownsampleConv,           // stride-2 conv
+    ChannelChangeDownsample,  // stride-2 + channel doubling + shortcut + norm
+}
+
+impl VideoEncoder {
+    pub fn new(
+        vs: &tch::nn::Path,
+        conv_in_channels: i64,   // 48 (from space_to_depth r=4)
+        base_channels: i64,      // 128
+        block_descs: &[EncoderBlockDesc],
+        conv_out_channels: i64,  // 129
+        norm_type: NormLayerType,
+        norm_groups: i64,
+        causal: bool,
+    ) -> Self {
         let conv_in = make_conv_nd(
             vs / "conv_in",
             3,
-            in_channels,
+            conv_in_channels,
             base_channels,
-            3,
-            1,
-            1,
-            causal,
-            "zeros",
+            3, 1, 1, causal, "zeros",
         );
 
-        let mut down_convs = Vec::new();
-        let mut down_resblocks = Vec::new();
-
-        for (i, &mult) in channel_multipliers.iter().enumerate() {
-            let ch = base_channels * mult;
-            let prev_ch = if i == 0 {
-                base_channels
-            } else {
-                base_channels * channel_multipliers[i - 1]
+        let mut blocks = Vec::new();
+        for (i, desc) in block_descs.iter().enumerate() {
+            let block_vs = vs / format!("down_blocks.{i}");
+            let stage = match &desc.kind {
+                EncoderBlockKind::ResBlocks(n) => {
+                    EncoderStage::ResBlocks(
+                        encoder_blocks::make_resblock_stage(
+                            &block_vs, desc.out_ch, *n,
+                            norm_type, norm_groups, causal,
+                        )
+                    )
+                }
+                EncoderBlockKind::DownsampleConv => {
+                    EncoderStage::DownsampleConv(
+                        encoder_blocks::make_downsample_conv(
+                            &block_vs, desc.in_ch, causal,
+                        )
+                    )
+                }
+                EncoderBlockKind::ChannelChangeDownsample => {
+                    EncoderStage::ChannelChange(
+                        encoder_blocks::ChannelChangeDownsample::new(
+                            &block_vs, desc.in_ch, desc.out_ch,
+                            norm_type, norm_groups, causal,
+                        )
+                    )
+                }
             };
-            let is_last = i == channel_multipliers.len() - 1;
-            let stride = if is_last { 1 } else { 2 };
-
-            let block = encoder_blocks::make_encoder_block(
-                vs / format!("down_{i}"),
-                prev_ch,
-                ch,
-                stride,
-                norm_type,
-                norm_num_groups,
-                causal,
-            );
-
-            let mut resblock_group = Vec::new();
-            for j in 0..num_res_blocks {
-                resblock_group.push(make_resblock(
-                    3,
-                    ch,
-                    ch,
-                    norm_type,
-                    norm_num_groups,
-                    causal,
-                    vs / format!("down_{i}") / "resblocks" / j,
-                ));
-            }
-
-            down_convs.push(block.conv);
-            down_resblocks.push(resblock_group);
+            blocks.push(stage);
         }
 
-        let last_mult = *channel_multipliers
-            .last()
-            .expect("channel_multipliers should not be empty");
-        let mid_channels = base_channels * last_mult;
-
-        let mid = UNetMidBlock3D::new(
-            vs / "mid",
-            mid_channels,
-            norm_type,
-            norm_num_groups,
-            causal,
-            1,
-        );
-
-        let conv_norm_out = build_norm_layer(norm_type, mid_channels, norm_num_groups);
+        // conv_out: last block's output channels → conv_out_channels
+        let last_out = block_descs.last().map(|d| d.out_ch).unwrap_or(base_channels);
         let conv_out = make_conv_nd(
             vs / "conv_out",
             3,
-            mid_channels,
-            latent_channels,
-            3,
-            1,
-            1,
-            causal,
-            "zeros",
+            last_out,
+            conv_out_channels,
+            3, 1, 1, causal, "zeros",
         );
 
-        Self {
-            conv_in,
-            down_convs,
-            down_resblocks,
-            mid,
-            conv_norm_out,
-            conv_out,
-        }
+        Self { conv_in, blocks, conv_out }
     }
 
+    /// Encode pixel-space video to distribution parameters.
+    ///
+    /// Returns raw conv_out output of shape `(B, 129, T', H', W')`.
+    /// Callers split into mean/logvar/scale as needed.
     pub fn forward(&self, x: &Tensor) -> Tensor {
-        let x = space_to_depth(x, 2);
-
-        let mut x = self.conv_in.forward_t(&x, false);
-
-        for (i, conv) in self.down_convs.iter().enumerate() {
-            x = conv.forward_t(&x, false);
-            for resblock in &self.down_resblocks[i] {
-                x = resblock.forward_t(&x, false);
-            }
+        let x = space_to_depth(x, 4);
+        let mut h = self.conv_in.forward_t(&x, false);
+        for block in &self.blocks {
+            h = block.forward(&h);
         }
-
-        x = self.mid.forward(&x);
-
-        let h = self.conv_norm_out.forward_t(&x, false).silu();
         self.conv_out.forward_t(&h, false)
+    }
+
+    /// Encode and sample: returns `(B, 128, T', H', W')` latent.
+    ///
+    /// Splits the 129-channel output into mean(64) + logvar(64) + scale(1),
+    /// then reparameterizes: `latent = mean + exp(0.5 * logvar) * noise`.
+    /// The scale channel is discarded.
+    pub fn encode(&self, x: &Tensor) -> Tensor {
+        let raw = self.forward(x);
+        let mean = raw.narrow(1, 0, 64);
+        let logvar = raw.narrow(1, 64, 64);
+        let std = (logvar * 0.5).exp();
+        let noise = Tensor::randn_like(&mean);
+        mean + std * noise
+    }
+
+    /// Encode and return the mean only (deterministic, for img2img).
+    pub fn encode_mean(&self, x: &Tensor) -> Tensor {
+        let raw = self.forward(x);
+        raw.narrow(1, 0, 64)
     }
 }
 
@@ -344,28 +339,31 @@ impl VideoVAE {
     #[allow(clippy::too_many_arguments)]
     pub fn new<'a>(
         vs: impl Borrow<Path<'a>>,
-        in_channels: i64,
+        conv_in_channels: i64,   // 48 — from space_to_depth(r=4)
         base_channels: i64,
+        block_descs: &[EncoderBlockDesc],
+        conv_out_channels: i64,  // 129 — mean(64) + logvar(64) + scale(1)
+        norm_type: NormLayerType,
+        norm_groups: i64,
+        causal: bool,
+        // Decoder still uses the old channel_multipliers layout
         channel_multipliers: &[i64],
         num_res_blocks: i64,
         latent_channels: i64,
-        norm_num_groups: i64,
-        causal: bool,
-        norm_type: NormLayerType,
+        in_channels: i64,
         spatial_downsample_factor: i64,
     ) -> Self {
         let vs = vs.borrow();
 
         let encoder = VideoEncoder::new(
-            vs / "encoder",
-            in_channels,
+            &(vs / "encoder"),
+            conv_in_channels,
             base_channels,
-            channel_multipliers,
-            num_res_blocks,
-            latent_channels,
-            norm_num_groups,
-            causal,
+            block_descs,
+            conv_out_channels,
             norm_type,
+            norm_groups,
+            causal,
         );
 
         let decoder = VideoDecoder::new(
@@ -375,7 +373,7 @@ impl VideoVAE {
             channel_multipliers,
             num_res_blocks,
             in_channels,
-            norm_num_groups,
+            norm_groups,
             causal,
             norm_type,
         );

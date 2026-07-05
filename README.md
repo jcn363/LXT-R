@@ -68,6 +68,7 @@ cargo run --release --bin ltx-inference -- \
   --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
   --tokenizer weights/tokenizer/spiece.model \
   --text-weights weights/text_encoder.safetensors \
+  --vae-weights weights/ltx-video-2b-v0.9.1.safetensors \
   --init-image path/to/image.png \
   --prompt "a sunset over mountains" \
   --strength 0.5 \
@@ -189,6 +190,7 @@ python3 scripts/convert_ltx_weights.py \
 | `--seed` | `42` | Random seed for reproducibility |
 | `--resume` | off | Skip prompts whose output directory already exists |
 | `--init-image` | none | Input image for img2img mode (any format: PNG, JPG, etc.) |
+| `--vae-weights` | none | VAE encoder .safetensors for proper img2img encoding (original LTX-Video checkpoint) |
 | `--strength` | `0.75` | Denoising strength for img2img (0.0=keep original, 1.0=full txt2img) |
 | `--height` | `16` | Latent height |
 | `--width` | `16` | Latent width |
@@ -369,7 +371,7 @@ crates/
 
 ### Known Limitations
 - **VAE decoder** — Decoder architecture mismatch with Python model (7 up_blocks vs 4 in Rust). Needs architecture alignment.
-- **VAE encoder** — Encoder architecture mismatch with Python model (timestep-conditioned, different channel dims). img2img uses direct image-to-latent conversion instead.
+- **VAE encoder** — Rewritten to match Python architecture (10 blocks, r=4 space_to_depth, 128-ch latent). img2img uses proper VAE encoding when `--vae-weights` is provided.
 - **Resolution** — 32x32 works with 8 steps on 32GB RAM. Higher resolutions require GPU or model sharding.
 - **56 skipped weights** — Cross-attention K/V projections use context_dim=4096 (T5) but were trained with 2048 (Gemma3).
 

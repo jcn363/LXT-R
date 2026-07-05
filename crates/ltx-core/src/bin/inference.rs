@@ -19,7 +19,9 @@ use ltx_text_encoder::encoder::{GemmaTextEncoder, T5TextEncoder};
 use ltx_text_encoder::tokenizer::LTXVGemmaTokenizer;
 use ltx_transformer::block::BasicAVTransformerBlock;
 use ltx_transformer::model::LTXModel;
-use ltx_types::{Guider, Scheduler, STABILITY_EPS};
+use ltx_types::{Guider, NormLayerType, Scheduler, STABILITY_EPS};
+use ltx_video_vae::configurator::default_encoder_block_descs;
+use ltx_video_vae::VideoEncoder;
 use tch::nn::ModuleT;
 use tch::{Device, Kind, Tensor};
 
@@ -110,6 +112,12 @@ struct Args {
     /// Only used when --init-image is provided.
     #[arg(long, default_value_t = 0.75)]
     strength: f64,
+
+    /// Path to .safetensors containing VAE encoder weights (vae.encoder.* keys).
+    /// Required for img2img with proper VAE encoding. When omitted, img2img
+    /// uses a direct pixel-to-latent conversion (lower quality).
+    #[arg(long)]
+    vae_weights: Option<String>,
 }
 
 fn parse_device(s: &str) -> Device {
@@ -172,18 +180,24 @@ fn is_mps_available() -> bool {
     cfg!(target_os = "macos") && tch::utils::has_mps()
 }
 
-/// Load an image file and convert to a 5D latent tensor: (1, 4, T, H, W).
+/// Load an image file and encode to latent space via VAE encoder.
 ///
-/// The image is resized to (width, height), normalized to [-1, 1], and its 3
-/// RGB channels are projected to 4 latent channels by padding the 4th with
-/// zeros.  The single frame is replicated across all T time steps.
+/// When `vae_weights_path` is provided, loads the encoder and produces a proper
+/// 128-channel latent via `VideoEncoder::encode_mean`. Otherwise falls back to
+/// the 3→4 channel padding workaround.
 fn load_init_image(
     path: &str,
     frames: i64,
     height: i64,
     width: i64,
     device: Device,
+    vae_weights_path: Option<&str>,
 ) -> Result<Tensor, String> {
+    if let Some(vw_path) = vae_weights_path {
+        return encode_via_vae(path, vw_path, frames, device);
+    }
+
+    // Fallback: direct pixel-to-latent conversion (no VAE)
     let img = image::open(path).map_err(|e| format!("open {path}: {e}"))?;
     let img = img.resize_exact(
         width as u32,
@@ -194,25 +208,119 @@ fn load_init_image(
     let raw = rgb.into_raw();
     let pixels: Vec<f32> = raw.iter().map(|&b| (b as f32 / 127.5) - 1.0).collect();
 
-    // (H, W, 3) → (1, 3, 1, H, W)
     let t = Tensor::from_slice(&pixels)
         .reshape([height, width, 3])
-        .permute([2, 0, 1]) // (3, H, W)
-        .unsqueeze(0) // (3, H, W) -> (1, 3, H, W)
-        .unsqueeze(2) // (1, 3, H, W) -> (1, 3, 1, H, W)
+        .permute([2, 0, 1])
+        .unsqueeze(0)
+        .unsqueeze(2)
         .to_kind(Kind::Float)
         .to_device(device);
-
-    // Replicate single frame across T time steps
     let t = t.expand([1, 3, frames, height, width], true);
-
-    // Pad 3 → 4 latent channels (4th channel = zeros)
     let zeros = Tensor::zeros([1, 1, frames, height, width], (Kind::Float, device));
     let latent = Tensor::cat(&[&t, &zeros], 1);
 
-    eprintln!("loaded init image: {path} -> [{}, {}, {}, {}, {}]",
+    eprintln!("loaded init image (no VAE): {path} -> [{}, {}, {}, {}, {}]",
         latent.size()[0], latent.size()[1], latent.size()[2], latent.size()[3], latent.size()[4]);
     Ok(latent)
+}
+
+/// Encode an image through the VAE encoder to produce a proper latent.
+///
+/// Loads image at original resolution, normalizes, replicates across frames,
+/// and encodes via `VideoEncoder::encode_mean` → 128-channel latent.
+fn encode_via_vae(
+    img_path: &str,
+    vae_weights_path: &str,
+    frames: i64,
+    device: Device,
+) -> Result<Tensor, String> {
+    // Load image at original resolution, normalize to [-1, 1]
+    let img = image::open(img_path).map_err(|e| format!("open {img_path}: {e}"))?;
+    let (orig_w, orig_h) = (img.width() as i64, img.height() as i64);
+
+    // Ensure dimensions are divisible by 32 (spatial downsample factor)
+    let h = (orig_h / 32) * 32;
+    let w = (orig_w / 32) * 32;
+    if h != orig_h || w != orig_w {
+        eprintln!("warning: resizing {orig_w}x{orig_h} to {w}x{h} (must be divisible by 32)");
+    }
+
+    let img = img.resize_exact(w as u32, h as u32, image::imageops::FilterType::Lanczos3);
+    let rgb = img.to_rgb8();
+    let raw = rgb.into_raw();
+    let pixels: Vec<f32> = raw.iter().map(|&b| (b as f32 / 127.5) - 1.0).collect();
+
+    // Build 5D tensor (1, 3, T, H, W)
+    let pixel_tensor = Tensor::from_slice(&pixels)
+        .reshape([h, w, 3])
+        .permute([2, 0, 1])
+        .unsqueeze(0)
+        .unsqueeze(2)
+        .to_kind(Kind::Float)
+        .to_device(device);
+    let pixel_tensor = pixel_tensor.expand([1, 3, frames, h, w], true);
+
+    // Build VAE encoder
+    let vs = tch::nn::VarStore::new(device);
+    let block_descs = default_encoder_block_descs();
+    let encoder = VideoEncoder::new(
+        &vs.root(),
+        48, // CONV_IN_CHANNELS = 3 * 4 * 4
+        128, // base_channels
+        &block_descs,
+        129, // ENCODER_CONV_OUT_CHANNELS
+        NormLayerType::Group,
+        32,  // norm_num_groups
+        false,
+    );
+
+    // Load VAE encoder weights
+    eprintln!("loading VAE encoder weights from {vae_weights_path}...");
+    let loaded = load_vae_encoder_weights(&vs, vae_weights_path)?;
+    eprintln!("  loaded {loaded} encoder tensors");
+
+    // Encode to 128-channel latent (mean only, deterministic)
+    eprintln!("encoding image via VAE encoder ({w}x{h} -> latent)...");
+    let latent = encoder.encode_mean(&pixel_tensor);
+    let latent_size = latent.size();
+    eprintln!("VAE latent: {:?}", latent_size);
+
+    // Free VAE encoder memory
+    drop(vs);
+
+    Ok(latent)
+}
+
+/// Load VAE encoder weights from a safetensors file.
+///
+/// Strips `vae.encoder.` prefix from checkpoint keys to match VarStore paths.
+fn load_vae_encoder_weights(vs: &tch::nn::VarStore, path: &str) -> Result<u32, String> {
+    let data = std::fs::read(path).map_err(|e| format!("read {path}: {e}"))?;
+    let st = safetensors::SafeTensors::deserialize(&data)
+        .map_err(|e| format!("deserialize {path}: {e}"))?;
+
+    let mut loaded = 0u32;
+    let _no_grad = tch::no_grad_guard();
+    let mut vars = vs.variables();
+
+    for (name, tensor) in vars.iter_mut() {
+        // Try mapping "encoder.xxx" -> checkpoint "vae.encoder.xxx"
+        let ckpt_name = format!("vae.{name}");
+        if let Ok(view) = st.tensor(&ckpt_name) {
+            let kind = match view.dtype() {
+                safetensors::Dtype::F16 => tch::Kind::Half,
+                safetensors::Dtype::BF16 => tch::Kind::BFloat16,
+                _ => tch::Kind::Float,
+            };
+            let shape: Vec<i64> = view.shape().iter().map(|&s| s as i64).collect();
+            let loaded_tensor = Tensor::from_data_size(view.data(), &shape, kind);
+            if tensor.size() == loaded_tensor.size() {
+                tensor.copy_(&loaded_tensor);
+                loaded += 1;
+            }
+        }
+    }
+    Ok(loaded)
 }
 
 fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64, context_dim: Option<i64>) -> LTXModel {
@@ -443,7 +551,7 @@ fn main() {
             eprintln!("error: --strength must be in [0.0, 1.0]");
             process::exit(1);
         }
-        match load_init_image(img_path, args.frames, args.height, args.width, device) {
+        match load_init_image(img_path, args.frames, args.height, args.width, device, args.vae_weights.as_deref()) {
             Ok(img) => {
                 eprintln!("img2img mode: strength={strength:.2}");
                 Some(img)
