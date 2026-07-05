@@ -38,50 +38,106 @@ ltx-core (facade)
 cargo build --workspace
 ```
 
-### Run Inference Demo
+### Run Inference (CLI)
 
 ```bash
-# With random weights (demo mode)
+# Random weights (demo)
 cargo run --bin ltx-inference -- --steps 4
 
-# Run with real weights (16x16, 20 steps)
-cargo run --release --bin ltx-inference -- --weights weights_rust_no_te.safetensors --steps 20
+# Real weights with text encoder (T5 prompt conditioning)
+cargo run --release --bin ltx-inference -- \
+  --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
+  --tokenizer weights/tokenizer/spiece.model \
+  --text-weights weights/text_encoder.safetensors \
+  --prompt "a sunset over mountains" \
+  --steps 20
 
-# Run with custom resolution
-cargo run --release --bin ltx-inference -- --weights weights_rust_no_te.safetensors --steps 8 --height 32 --width 32
+# Real weights on GPU
+cargo run --release --bin ltx-inference -- \
+  --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
+  --device cuda \
+  --steps 20
 
-# Run with prompt
-cargo run --release --bin ltx-inference -- --weights weights_rust_no_te.safetensors --prompt "a sunset over mountains"
+# Custom resolution
+cargo run --release --bin ltx-inference -- \
+  --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
+  --steps 8 --height 32 --width 32 --frames 8
 ```
+
+### Generate GIF
+
+```bash
+# Simple
+./generate_gif.sh "a sunset over mountains"
+
+# With options
+./generate_gif.sh "a cat walking" --steps 20 --fps 12 --scale 512
+./generate_gif.sh "a dog running" --pixel  # pixelated look
+```
+
+### Run GUI
+
+```bash
+cargo run -p ltx-app
+```
+
+The GUI provides:
+- Prompt input and model weights picker
+- Text encoder weights picker (T5 or Gemma3)
+- Resolution, steps, CFG, scheduler, device controls
+- Live preview with play/pause and frame scrubber
+- Export: PNGs, MP4, or GIF
 
 ### Run Tests
 
 ```bash
-cargo test --workspace  # 480 tests
+cargo test --workspace  # 485 tests
 ```
 
 ## Weight Conversion
 
-Weight conversion from HuggingFace LTX-Video checkpoints to Rust-compatible safetensors format:
+Download and convert LTX-Video weights:
 
 ```bash
 # Download from HuggingFace
 python3 -c "
-from huggingface_hub import hf_hub_download
-hf_hub_download('Lightricks/LTX-Video', 'ltxv-2b-0.9.8-distilled.safetensors', local_dir='weights')
+from huggingface_hub import hf_hub_download, list_repo_files
+import os
+os.makedirs('weights', exist_ok=True)
+hf_hub_download('Lightricks/LTX-Video', 'ltx-video-2b-v0.9.1.safetensors', local_dir='weights')
+hf_hub_download('Lightricks/LTX-Video', 'tokenizer/spiece.model', local_dir='weights')
+# Download T5 text encoder (split into 4 shards)
+for i in range(1, 5):
+    hf_hub_download('Lightricks/LTX-Video', f'text_encoder/model-0000{i}-of-00004.safetensors', local_dir='weights')
 "
 
-# Convert to Rust format (handles key remapping, adaln duplication)
-python3 scripts/convert_ltx_weights.py --input weights/ltxv-2b-0.9.8-distilled.safetensors --output weights_rust.safetensors
+# Convert transformer weights to Rust format
+python3 scripts/convert_ltx_weights.py \
+  --input weights/ltx-video-2b-v0.9.1.safetensors \
+  --output weights/ltx-video-2b-v0.9.1-rust.safetensors
 ```
 
-See `scripts/convert_ltx_weights.py` for key remapping details.
+## CLI Arguments
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--weights` | none | Transformer .safetensors (omit for random init) |
+| `--tokenizer` | none | SentencePiece tokenizer model |
+| `--text-weights` | none | Text encoder .safetensors (T5 or Gemma3) |
+| `--device` | `cpu` | Inference device (`cpu`, `cuda`, `cuda:N`) |
+| `--steps` | `20` | Denoising steps |
+| `--prompt` | `"a colorful abstract pattern"` | Text prompt |
+| `--height` | `16` | Latent height |
+| `--width` | `16` | Latent width |
+| `--frames` | `4` | Number of frames |
+| `--cfg` | `7.5` | Classifier-free guidance scale |
 
 ## Prerequisites
 
 - Rust 1.75+
-- CUDA toolkit (for `ltx-fp8` and `ltx-loader` FFI)
-- Python 3.10+ (for golden test data generation and weight conversion)
+- CUDA toolkit (optional, for GPU inference)
+- Python 3.10+ (for weight conversion and HuggingFace downloads)
+- ffmpeg (for MP4/GIF export)
 
 ## SSOT Enforcement
 
@@ -128,7 +184,7 @@ crates/
 ├── ltx-video-vae/      # Video VAE
 ├── ltx-audio-vae/      # Audio VAE
 ├── ltx-upsampler/      # Latent upsampling
-├── ltx-text-encoder/   # Gemma3 + SigLIP
+├── ltx-text-encoder/   # T5 + Gemma3 + SigLIP text encoders
 ├── ltx-loader/         # Checkpoint loading
 ├── ltx-quantization/   # FP8 quantization policy
 ├── ltx-test-utils/     # Golden file loading, assertions
@@ -141,26 +197,25 @@ crates/
 
 ### Completed
 - All 22 crates implemented (~13,600 LOC)
-- 480 tests passing
+- 485 tests passing
 - Inference pipeline loads 929/929 tensors from LTX-Video 2B model
 - 28-layer transformer runs with real weights
-- Video frames generated (16x16 to 32x32 RGB)
-- SentencePiece tokenizer integrated
-- Configurable resolution and denoising steps via CLI
-- eframe GUI with video playback toolbar and export (PNG/MP4)
+- T5 text encoder with mmap + FP16 loading (memory-efficient)
+- Prompt conditioning via T5 cross-attention (4096-dim context)
+- GPU support via `--device cuda` flag
+- eframe GUI with video playback toolbar and export (PNG/MP4/GIF)
+- CLI with full argument support
 
 ### Known Limitations
 - **VAE decoder** — Decoder architecture mismatch with Python model (7 up_blocks vs 4 in Rust). Needs architecture alignment.
-- **Text encoder** — Gemma3 tokenizer infrastructure complete. Full encoder not yet wired due to memory constraints.
 - **Resolution** — 32x32 works with 8 steps on 32GB RAM. Higher resolutions require GPU or model sharding.
-- **Denoising steps** — 20 steps at 16x16, 8 steps at 32x32 on 32GB RAM. More steps possible on GPU.
+- **56 skipped weights** — Cross-attention K/V projections use context_dim=4096 (T5) but were trained with 2048 (Gemma3).
 
 ### Not Yet Implemented
 1. **VAE decoder alignment** — Align Rust decoder architecture with Python model's 7-block structure
-2. **Text encoder integration** — Wire Gemma3 encoder for prompt conditioning
-3. **GPU support** — CUDA acceleration for higher resolution and more steps
-4. **Model sharding** — Split model across CPU/GPU for larger resolutions
-5. **Audio pipeline** — Audio VAE + transformer for audio generation
+2. **Model sharding** — Split model across CPU/GPU for larger resolutions
+3. **Audio pipeline** — Audio VAE + transformer for audio generation
+4. **Full GPU inference** — Move transformer to GPU for faster denoising
 
 ## License
 

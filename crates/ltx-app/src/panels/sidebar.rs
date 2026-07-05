@@ -199,6 +199,26 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                     }
                 }
             }
+            if ui.button("Save GIF").clicked() {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("GIF", &["gif"])
+                    .save_file()
+                {
+                    let dir = path.parent().unwrap_or(std::path::Path::new("."));
+                    match crate::export::save_gif(
+                        &state.frames_display,
+                        state.height,
+                        state.width,
+                        dir,
+                        &path,
+                        8,
+                        256,
+                    ) {
+                        Ok(_) => state.output_dir = Some(path),
+                        Err(e) => state.inference = crate::state::InferenceState::Error(e),
+                    }
+                }
+            }
         });
     }
 }

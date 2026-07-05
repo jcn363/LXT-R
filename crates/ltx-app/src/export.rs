@@ -20,17 +20,7 @@ pub fn save_video_mp4(
     dir: &Path,
     output: &Path,
 ) -> Result<PathBuf, String> {
-    // Save frames as temporary PGM files for ffmpeg
-    let tmp_dir = dir.join(".tmp_frames");
-    std::fs::create_dir_all(&tmp_dir).map_err(|e| format!("create tmp dir: {e}"))?;
-
-    for (i, frame) in frames.iter().enumerate() {
-        let path = tmp_dir.join(format!("frame_{i:04}.pgm"));
-        use std::io::Write;
-        let mut f = std::fs::File::create(&path).map_err(|e| format!("create pgm: {e}"))?;
-        write!(f, "P6\n{w} {h}\n255\n").map_err(|e| format!("write header: {e}"))?;
-        f.write_all(frame).map_err(|e| format!("write pixels: {e}"))?;
-    }
+    let tmp_dir = save_temp_pgm(frames, h, w, dir)?;
 
     let status = std::process::Command::new("ffmpeg")
         .args([
@@ -44,7 +34,6 @@ pub fn save_video_mp4(
         .status()
         .map_err(|e| format!("ffmpeg: {e}"))?;
 
-    // Cleanup temp files
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
     if status.success() {
@@ -52,6 +41,66 @@ pub fn save_video_mp4(
     } else {
         Err("ffmpeg failed".to_string())
     }
+}
+
+pub fn save_gif(
+    frames: &[Vec<u8>],
+    h: i64,
+    w: i64,
+    dir: &Path,
+    output: &Path,
+    fps: u32,
+    scale: u32,
+) -> Result<PathBuf, String> {
+    let tmp_dir = save_temp_pgm(frames, h, w, dir)?;
+
+    let filter = format!(
+        "scale={scale}:{scale}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
+    );
+
+    let status = std::process::Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-framerate",
+            &fps.to_string(),
+            "-i",
+            tmp_dir.join("frame_%04d.pgm").to_str().unwrap_or(""),
+            "-vf",
+            &filter,
+            "-loop",
+            "0",
+            output.to_str().unwrap_or("output.gif"),
+        ])
+        .status()
+        .map_err(|e| format!("ffmpeg: {e}"))?;
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    if status.success() {
+        Ok(output.to_path_buf())
+    } else {
+        Err("ffmpeg gif failed".to_string())
+    }
+}
+
+fn save_temp_pgm(
+    frames: &[Vec<u8>],
+    h: i64,
+    w: i64,
+    dir: &Path,
+) -> Result<PathBuf, String> {
+    let tmp_dir = dir.join(".tmp_frames");
+    std::fs::create_dir_all(&tmp_dir).map_err(|e| format!("create tmp dir: {e}"))?;
+
+    for (i, frame) in frames.iter().enumerate() {
+        let path = tmp_dir.join(format!("frame_{i:04}.pgm"));
+        use std::io::Write;
+        let mut f = std::fs::File::create(&path).map_err(|e| format!("create pgm: {e}"))?;
+        write!(f, "P6\n{w} {h}\n255\n").map_err(|e| format!("write header: {e}"))?;
+        f.write_all(frame).map_err(|e| format!("write pixels: {e}"))?;
+    }
+
+    Ok(tmp_dir)
 }
 
 #[cfg(test)]
@@ -107,8 +156,29 @@ mod tests {
                 assert!(fs::metadata(&output).unwrap().len() > 0, "mp4 empty");
             }
             Err(e) => {
-                // ffmpeg not installed in CI — skip gracefully
                 eprintln!("ffmpeg not available: {e} — skipping mp4 test");
+            }
+        }
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn save_gif_creates_file() {
+        let tmp = std::env::temp_dir().join("ltx_test_gif");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let frames = make_test_frames(4, 16, 16);
+        let output = tmp.join("test.gif");
+
+        match save_gif(&frames, 16, 16, &tmp, &output, 8, 64) {
+            Ok(_) => {
+                assert!(output.exists(), "gif not created");
+                assert!(fs::metadata(&output).unwrap().len() > 0, "gif empty");
+            }
+            Err(e) => {
+                eprintln!("ffmpeg not available: {e} — skipping gif test");
             }
         }
 

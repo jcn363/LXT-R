@@ -96,6 +96,26 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
         ui.label(format!("{:.1}×", state.fps / 8.0));
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button("⬇ GIF").clicked() {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("GIF", &["gif"])
+                    .save_file()
+                {
+                    let dir = path.parent().unwrap_or(std::path::Path::new("."));
+                    match crate::export::save_gif(
+                        &state.frames_display,
+                        state.height,
+                        state.width,
+                        dir,
+                        &path,
+                        8,
+                        256,
+                    ) {
+                        Ok(_) => {}
+                        Err(e) => state.inference = crate::state::InferenceState::Error(e),
+                    }
+                }
+            }
             if ui.button("⬇ Video").clicked() {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("MP4", &["mp4"])
