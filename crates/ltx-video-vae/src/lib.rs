@@ -37,6 +37,7 @@ pub fn load_vae_weights(vs: &tch::nn::VarStore, path: &str, prefix: &str) -> u32
             loaded += 1;
             continue;
         }
+        // Try .conv. wrapper fallback
         if let Some(pos) = ckpt_name.rfind('.') {
             let suffix = &ckpt_name[pos + 1..];
             if suffix == "weight" || suffix == "bias" {
@@ -46,6 +47,21 @@ pub fn load_vae_weights(vs: &tch::nn::VarStore, path: &str, prefix: &str) -> u32
                     loaded += 1;
                     continue;
                 }
+            }
+        }
+        // Fallback: per_channel_statistics path uses hyphens in checkpoint
+        if name.contains("per_channel_statistics") {
+            // VarStore: {encoder|decoder}.per_channel_statistics/mean_of_means
+            // Checkpoint: vae.per_channel_statistics.mean-of-means
+            let stripped = name.trim_start_matches("encoder.").trim_start_matches("decoder.")
+                               .trim_start_matches("encoder/").trim_start_matches("decoder/");
+            let alt = stripped.replace("mean_of_means", "mean-of-means")
+                              .replace("std_of_means", "std-of-means")
+                              .replace('/', ".");
+            let alt_ckpt = format!("{prefix}{alt}");
+            if load_one(&st, &alt_ckpt, tensor) {
+                loaded += 1;
+                continue;
             }
         }
         eprintln!("UNMATCHED: {name} (looked for {ckpt_name})");
@@ -91,6 +107,9 @@ pub struct VideoEncoder {
     conv_in: Box<dyn ModuleT>,
     blocks: Vec<EncoderStage>,
     conv_out: Box<dyn ModuleT>,
+    // Per-channel latent normalization
+    pc_mean: Tensor, // [128]
+    pc_std: Tensor,  // [128]
 }
 
 impl std::fmt::Debug for VideoEncoder {
@@ -171,7 +190,11 @@ impl VideoEncoder {
             3, 1, 1, causal, "zeros",
         );
 
-        Self { conv_in, blocks, conv_out }
+        // Per-channel latent normalization
+        let pc_mean = vs.var("per_channel_statistics/mean_of_means", &[128], tch::nn::init::Init::Const(0.0));
+        let pc_std = vs.var("per_channel_statistics/std_of_means", &[128], tch::nn::init::Init::Const(1.0));
+
+        Self { conv_in, blocks, conv_out, pc_mean, pc_std }
     }
 
     /// Encode pixel-space video to distribution parameters.
@@ -203,12 +226,13 @@ impl VideoEncoder {
 
     /// Encode and return the full latent (deterministic, for img2img).
     ///
-    /// Returns the first 128 of 129 conv_out channels directly. This is the
-    /// raw encoder output before any reparameterization — suitable when you
-    /// want deterministic encoding without sampling noise.
+    /// Returns the first 128 of 129 conv_out channels, then applies
+    /// per-channel normalization: `(x - mean) / std`.
     pub fn encode_mean(&self, x: &Tensor) -> Tensor {
         let raw = self.forward(x);
-        raw.narrow(1, 0, 128)
+        let means = raw.narrow(1, 0, 128);
+        // Normalize: (x - mean) / std
+        (&means - &self.pc_mean.view([1, -1, 1, 1, 1])) / &self.pc_std.view([1, -1, 1, 1, 1])
     }
 }
 
@@ -259,6 +283,9 @@ pub struct VideoDecoder {
     last_time_embedder: TimestepEmbedding,
     last_scale_shift_table: Tensor, // [2, 128]
     conv_out: Box<dyn ModuleT>,
+    // Per-channel latent normalization
+    pc_mean: Tensor, // [128]
+    pc_std: Tensor,  // [128]
 }
 
 impl std::fmt::Debug for VideoDecoder {
@@ -331,6 +358,10 @@ impl VideoDecoder {
         let last_scale_shift_table = vs.var("last_scale_shift_table", &[2, 128], tch::nn::init::Init::Const(0.0));
         let conv_out = make_conv_nd(vs / "conv_out", 3, 128, 48, 3, 1, 1, causal, "zeros");
 
+        // Per-channel latent normalization (denormalize before decoding)
+        let pc_mean = vs.var("per_channel_statistics/mean_of_means", &[128], tch::nn::init::Init::Const(0.0));
+        let pc_std = vs.var("per_channel_statistics/std_of_means", &[128], tch::nn::init::Init::Const(1.0));
+
         Self {
             conv_in,
             timestep_scale_multiplier,
@@ -340,13 +371,19 @@ impl VideoDecoder {
             last_time_embedder,
             last_scale_shift_table,
             conv_out,
+            pc_mean,
+            pc_std,
         }
     }
 
     /// Decode latent to pixel space with timestep conditioning.
     pub fn forward(&self, x: &Tensor, timestep: &Tensor) -> Tensor {
-        let t = get_timestep_embedding(timestep, self.sinusoidal_dim, 10000) * &self.timestep_scale_multiplier;
-        let mut h = self.conv_in.forward_t(x, false);
+        // Denormalize latent: (x * std) + mean
+        let x = x * &self.pc_std.view([1, -1, 1, 1, 1]) + &self.pc_mean.view([1, -1, 1, 1, 1]);
+        // Scale timestep BEFORE sinusoidal embedding (matches Python: scaled_timestep = timestep * multiplier)
+        let scaled_t = timestep * &self.timestep_scale_multiplier;
+        let t = get_timestep_embedding(&scaled_t, self.sinusoidal_dim, 10000);
+        let mut h = self.conv_in.forward_t(&x, false);
 
         let mut stage_idx = 0;
         let mut compress_idx = 0;
