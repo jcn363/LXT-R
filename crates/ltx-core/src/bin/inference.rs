@@ -1,11 +1,30 @@
 //! LTX-2.3 inference demo.
 //!
-//! Usage:
-//!   ltx-inference --steps 4
-//!   ltx-inference --weights model.safetensors --steps 20
-//!   ltx-inference --weights model.safetensors --tokenizer tok.model --text-weights text.safetensors --prompt "a sunset"
+//! Full diffusion sampling pipeline: text encoding → transformer denoising →
+//! optional VAE decode → frame/GIF output.
 //!
-//! Memory-efficient: encodes prompt, frees text encoder, then loads transformer.
+//! Usage:
+//!   # Text-to-video (latent output, no VAE decode):
+//!   ltx-inference --weights model.safetensors --steps 20 --prompt "a sunset"
+//!
+//!   # Text-to-video with VAE decode (pixel-space frames):
+//!   ltx-inference --weights model.safetensors --steps 20 --decode --prompt "a sunset"
+//!
+//!   # Image-to-image (denoise an existing image):
+//!   ltx-inference --weights model.safetensors --steps 20 \
+//!       --init-image photo.jpg --strength 0.75 --vae-weights model.safetensors
+//!
+//!   # Batch processing:
+//!   ltx-inference --weights model.safetensors --steps 20 \
+//!       --prompts-file prompts.txt --output-dir batch_output
+//!
+//! Pipeline stages:
+//!   1. Load text encoder (Gemma3 or T5), encode prompt, free encoder
+//!   2. Load transformer model weights
+//!   3. (Optional) Load init image and encode to latent via VAE encoder
+//!   4. For each prompt: denoise latent via Euler steps with CFG guidance
+//!   5. (Optional) Decode final latent through VAE decoder to pixel space
+//!   6. Save frames as PNG and animated GIF
 
 use std::process;
 
@@ -20,8 +39,8 @@ use ltx_text_encoder::tokenizer::LTXVGemmaTokenizer;
 use ltx_transformer::block::BasicAVTransformerBlock;
 use ltx_transformer::model::LTXModel;
 use ltx_types::{Guider, NormLayerType, Scheduler, STABILITY_EPS};
-use ltx_video_vae::configurator::default_encoder_block_descs;
-use ltx_video_vae::VideoEncoder;
+use ltx_video_vae::configurator::{build_decoder, default_encoder_block_descs};
+use ltx_video_vae::{load_vae_weights, VideoEncoder};
 use tch::nn::ModuleT;
 use tch::{Device, Kind, Tensor};
 
@@ -118,6 +137,13 @@ struct Args {
     /// uses a direct pixel-to-latent conversion (lower quality).
     #[arg(long)]
     vae_weights: Option<String>,
+
+    /// Decode final latent through VAE decoder to produce pixel-space video frames.
+    /// Requires VAE weights (either --vae-weights or --weights containing vae.decoder.* keys).
+    /// When enabled, outputs high-quality PNG frames at full resolution instead of
+    /// low-resolution latent visualizations.
+    #[arg(long)]
+    decode: bool,
 }
 
 fn parse_device(s: &str) -> Device {
@@ -289,6 +315,40 @@ fn encode_via_vae(
     drop(vs);
 
     Ok(latent)
+}
+
+/// Decode a latent tensor through the VAE decoder to produce pixel-space frames.
+///
+/// Takes a `(B, 128, T, H, W)` latent and returns `(B, 3, T, H', W')` pixel output
+/// where `H' = H * 32`, `W' = W * 32` (matching the encoder's spatial compression).
+///
+/// The decoder uses timestep conditioning with a default `decode_timestep=0.05`
+/// (matching the Python LTX-Video reference implementation).
+///
+/// Weights are loaded from the given safetensors file, looking for keys under
+/// the `vae.decoder.*` prefix. The VarStore is freed after decoding to release
+/// GPU memory before the next prompt in batch mode.
+fn decode_via_vae(
+    latent: &Tensor,
+    vae_weights_path: &str,
+    device: Device,
+) -> Result<Tensor, String> {
+    let vs = tch::nn::VarStore::new(device);
+    let decoder = build_decoder(&vs.root(), NormLayerType::Group, 32, false);
+
+    eprintln!("loading VAE decoder weights from {vae_weights_path}...");
+    let loaded = load_vae_weights(&vs, vae_weights_path, "vae.");
+    eprintln!("  loaded {loaded} decoder tensors");
+
+    // Default decode timestep (matches Python: decode_timestep = 0.05)
+    let timestep = Tensor::from_slice(&[0.05f32]).to_device(device);
+    let pixel = decoder.forward(latent, &timestep);
+
+    // Free decoder weights
+    drop(vs);
+
+    eprintln!("  decoded latent {:?} → pixel {:?}", latent.size(), pixel.size());
+    Ok(pixel)
 }
 
 fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64, context_dim: Option<i64>) -> LTXModel {
@@ -640,13 +700,33 @@ fn main() {
         let elapsed = t0.elapsed().as_secs_f64();
         timings.push(elapsed);
 
+        // VAE decode: convert latent to pixel-space frames
+        let output_tensor = if args.decode {
+            let vae_path = args.vae_weights.as_deref().or(args.weights.as_deref());
+            match vae_path {
+                Some(path) => match decode_via_vae(&x, path, device) {
+                    Ok(pixel) => pixel,
+                    Err(e) => {
+                        eprintln!("{prompt_label}VAE decode failed: {e} — saving latent output");
+                        x.clamp(-1.0, 1.0)
+                    }
+                },
+                None => {
+                    eprintln!("{prompt_label}error: --decode requires --vae-weights or --weights with VAE keys — saving latent output");
+                    x.clamp(-1.0, 1.0)
+                }
+            }
+        } else {
+            x.clamp(-1.0, 1.0)
+        };
+
         // Save output
         let out_dir = if batch_mode {
             std::path::PathBuf::from(&args.output_dir).join(format!("{:04}", idx + 1))
         } else {
             std::path::PathBuf::from("output_frames")
         };
-        save_frames(&x.to_device(Device::Cpu), &out_dir, args.frames, args.height, args.width);
+        save_frames(&output_tensor.to_device(Device::Cpu), &out_dir, args.frames, args.height, args.width);
 
         // Save GIF
         let gif_path = if batch_mode {
@@ -655,7 +735,7 @@ fn main() {
             std::path::PathBuf::from("output.gif")
         };
         let _ = std::fs::create_dir_all(gif_path.parent().unwrap_or(std::path::Path::new(".")));
-        if let Err(e) = save_gif(&x.to_device(Device::Cpu), args.frames, args.height, args.width, &gif_path) {
+        if let Err(e) = save_gif(&output_tensor.to_device(Device::Cpu), args.frames, args.height, args.width, &gif_path) {
             eprintln!("{prompt_label}  gif: {e}");
         } else {
             eprintln!("{prompt_label}  saved: {}", gif_path.display());
