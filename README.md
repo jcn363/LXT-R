@@ -131,6 +131,15 @@ cargo run --release --bin ltx-inference -- \
 | `--audio` | off | Enable audio generation alongside video |
 | `--audio-vae-weights` | none | Audio VAE .safetensors for audio generation |
 | `--audio-output` | `output.wav` | Output path for generated audio WAV |
+| `--step-method` | `euler` | Diffusion step method: `euler` (default) or `res2s` |
+| `--guider` | `cfg` | Guidance strategy: `cfg`, `apg`, or `stg` |
+| `--apg-scale` | `7.5` | APG guidance scale (with `--guider apg`) |
+| `--apg-momentum` | `0.0` | APG momentum factor (with `--guider apg`) |
+| `--stg-spatial-scale` | `7.5` | STG spatial scale (with `--guider stg`) |
+| `--stg-temporal-scale` | `3.0` | STG temporal scale (with `--guider stg`) |
+| `--tile-size` | `0` | Spatial tile size in latent pixels (0=disabled) |
+| `--tile-overlap` | `4` | Tiling overlap in latent pixels |
+| `--shard` | none | Multi-GPU model sharding (e.g., `cuda:0,cuda:1`) |
 
 ## GPU Inference
 
@@ -180,7 +189,9 @@ export LD_LIBRARY_PATH=/opt/libtorch/lib:$LD_LIBRARY_PATH
 ├─────────────────────────────────────────────────────────────────┤
 │  Phase 2: Transformer denoising (GPU)                          │
 │    Load transformer → for each prompt:                         │
-│      patchify → [cond, uncond] forward → CFG → Euler step    │
+│      patchify → [cond, uncond] forward → CFG/APG/STG         │
+│      → Euler/Res2s step → unpatchify                          │
+│    Optional: spatial tiling for large resolutions              │
 │    All tensors on device during denoising loop                 │
 ├─────────────────────────────────────────────────────────────────┤
 │  Phase 3: Decode & output                                      │
@@ -323,13 +334,23 @@ crates/
 - Profile denoising throughput (frames/sec at various resolutions)
 - Memory profiling on GPU
 - INT4 quantization (CLI flag exists, not yet wired)
-- Tiled decoding for higher resolutions (768×512 native)
+- Model sharding for multi-GPU (CLI flag parsed, round-robin distribution planned)
 
-### Potential Improvements
-- Res2sStep as alternative to Euler (available, not default)
-- STG/APG guiders (available, not wired into CLI)
-- Model sharding for multi-GPU
-- Tiling support for large frames
+### Completed in This Session
+- ✅ VAE decoder rewrite to match Python checkpoint (7 up_blocks, CompressAllUpsample, AdaLN)
+- ✅ VAE encoder architecture matching (10 blocks, r=4 space_to_depth, 128-ch latent)
+- ✅ Full encode-decode roundtrip verified: `[1,3,1,256,256]` → `[1,128,1,8,8]` → `[1,3,1,256,256]`
+- ✅ Latent normalization (per-channel mean/std loaded from checkpoint)
+- ✅ Timestep scaling fix (multiply before sinusoidal embedding)
+- ✅ Full GPU inference (context tensors on device, timestep on device)
+- ✅ VAE decode pipeline (pixel-space PNG output)
+- ✅ Audio pipeline (transformer audio modality, audio VAE, WAV output)
+- ✅ Res2sStep alternative (second-order residual scaling)
+- ✅ APG/STG guiders (adaptive projected, spatio-temporal guidance)
+- ✅ Spatial tiling for memory-efficient generation
+- ✅ Model sharding CLI flag (parsed, ready for implementation)
+- ✅ PNG frame output alongside PGM/GIF
+- ✅ Comprehensive CLI with 24 flags
 
 ## License
 
