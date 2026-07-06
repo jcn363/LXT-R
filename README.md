@@ -232,6 +232,28 @@ Converts mel spectrograms to latent representations and back.
 - Vocoder: ConvTranspose1d upsampling + ResBlock1 refinement → waveform
 - Latent channels: 64, mel features: 128 bins
 
+## GUI Application
+
+```bash
+cargo run -p ltx-app
+```
+
+The `ltx-app` crate provides an eframe-based GUI with hover tooltips on all controls:
+
+| Control | Description |
+|---------|-------------|
+| **Prompt** | Text description of the video to generate |
+| **Model Weights** | Transformer .safetensors checkpoint (omit for random init) |
+| **Text Encoder** | SentencePiece tokenizer + text encoder weights (T5 or Gemma3) |
+| **Resolution** | Latent-space H/W dimensions (pixel = latent × 32) |
+| **Frames** | Number of video frames to generate |
+| **Steps** | Denoising steps: 5-10 quick preview, 20-50 for quality |
+| **CFG Scale** | Classifier-free guidance: 1.0=none, 7.5=default, 15.0+=strong |
+| **Scheduler** | Noise schedule: LTX-2 (default), Linear-Quadratic, Beta |
+| **Device** | Compute backend: CPU, CUDA (NVIDIA), MPS (Apple Metal) |
+| **Generate** | Start video generation |
+| **Export** | Save PNGs, MP4 video (H.264, 8fps), or animated GIF (256×256) |
+
 ## Testing
 
 ```bash
