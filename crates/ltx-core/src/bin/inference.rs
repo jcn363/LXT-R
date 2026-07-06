@@ -1,30 +1,48 @@
-//! LTX-2.3 inference demo.
+//! LTX-2.3 inference pipeline.
 //!
-//! Full diffusion sampling pipeline: text encoding → transformer denoising →
-//! optional VAE decode → frame/GIF output.
+//! End-to-end diffusion video generation with optional audio synthesis.
 //!
-//! Usage:
-//!   # Text-to-video (latent output, no VAE decode):
-//!   ltx-inference --weights model.safetensors --steps 20 --prompt "a sunset"
+//! # Pipeline Architecture
 //!
-//!   # Text-to-video with VAE decode (pixel-space frames):
-//!   ltx-inference --weights model.safetensors --steps 20 --decode --prompt "a sunset"
+//! ```text
+//!  ┌─────────────────────────────────────────────────────────────────┐
+//!  │                    MEMORY-EFFICIENT PIPELINE                    │
+//!  ├─────────────────────────────────────────────────────────────────┤
+//!  │  Phase 1: Text encoding (CPU)                                  │
+//!  │    Load T5/Gemma3 → encode prompts → free encoder (~18GB)     │
+//!  │    Context tensors copied to GPU once                          │
+//!  ├─────────────────────────────────────────────────────────────────┤
+//!  │  Phase 2: Transformer denoising (GPU)                          │
+//!  │    Load transformer → for each prompt:                         │
+//!  │      patchify → [cond, uncond] forward → CFG → Euler step    │
+//!  │    All tensors on device during denoising loop                 │
+//!  ├─────────────────────────────────────────────────────────────────┤
+//!  │  Phase 3: Decode & output                                      │
+//!  │    (optional) VAE decode → PNG/GIF frames                      │
+//!  │    (optional) Audio VAE → WAV output                           │
+//!  └─────────────────────────────────────────────────────────────────┘
+//! ```
 //!
-//!   # Image-to-image (denoise an existing image):
-//!   ltx-inference --weights model.safetensors --steps 20 \
-//!       --init-image photo.jpg --strength 0.75 --vae-weights model.safetensors
+//! # Usage Examples
 //!
-//!   # Batch processing:
-//!   ltx-inference --weights model.safetensors --steps 20 \
-//!       --prompts-file prompts.txt --output-dir batch_output
+//! ```bash
+//! # Basic text-to-video with VAE decode
+//! ltx-inference --weights model.safetensors --steps 20 \
+//!     --decode --vae-weights model.safetensors \
+//!     --prompt "a sunset over mountains"
 //!
-//! Pipeline stages:
-//!   1. Load text encoder (Gemma3 or T5), encode prompt, free encoder
-//!   2. Load transformer model weights
-//!   3. (Optional) Load init image and encode to latent via VAE encoder
-//!   4. For each prompt: denoise latent via Euler steps with CFG guidance
-//!   5. (Optional) Decode final latent through VAE decoder to pixel space
-//!   6. Save frames as PNG and animated GIF
+//! # Image-to-image with audio
+//! ltx-inference --weights model.safetensors --steps 20 \
+//!     --init-image photo.jpg --strength 0.75 \
+//!     --decode --vae-weights model.safetensors \
+//!     --audio --audio-vae-weights audio_vae.safetensors \
+//!     --prompt "animate this photo"
+//!
+//! # Batch processing with resume
+//! ltx-inference --weights model.safetensors --steps 20 \
+//!     --prompts-file prompts.txt --output-dir batch_output \
+//!     --decode --vae-weights model.safetensors --resume
+//! ```
 
 use std::process;
 
@@ -812,9 +830,9 @@ fn main() {
                     (Kind::Float, device),
                 );
 
-                // Denoise audio latent
+                // Denoise audio latent using the same transformer as video
                 let denoised_audio = denoise_audio(
-                    &audio_latent, context, &Tensor::from_slice(&[0.05f32]).to_device(device),
+                    &audio_latent, &model, context, patchify_proj.as_ref(),
                     device, args.steps, args.cfg,
                 );
 
@@ -889,6 +907,24 @@ fn save_frames(x: &Tensor, dir: &std::path::Path, frames: i64, h: i64, w: i64) {
     }
 
     use std::io::Write;
+
+    // Save PNG frames (primary output)
+    for i in 0..frames {
+        let frame = pixel.narrow(2, i, 1).reshape([3, h, w]).permute([1, 2, 0]);
+        let path = dir.join(format!("frame_{i:04}.png"));
+
+        // Convert tensor to image::RgbBuffer
+        let mut img = image::ImageBuffer::new(w as u32, h as u32);
+        let frame_bytes: Vec<u8> = (0..h * w * 3).map(|j| frame.double_value(&[j]) as u8).collect();
+        for (pixel_out, rgb) in img.pixels_mut().zip(frame_bytes.chunks(3)) {
+            *pixel_out = image::Rgb([rgb[0], rgb[1], rgb[2]]);
+        }
+        if let Err(e) = img.save(&path) {
+            eprintln!("warning: save PNG {}: {e}", path.display());
+        }
+    }
+
+    // Also save PGM frames (fallback for ffmpeg pipeline)
     for i in 0..frames {
         let frame = pixel.narrow(2, i, 1).reshape([3, h, w]).permute([1, 2, 0]);
         let path = dir.join(format!("frame_{i:04}.pgm"));
@@ -1019,17 +1055,19 @@ fn save_wav(audio: &Tensor, path: &std::path::Path, sample_rate: u32) -> Result<
 /// - T_audio = temporal frames (aligned with video)
 /// - F = frequency bins (128 mel bins)
 ///
+/// Uses the same transformer architecture as video denoising, with audio
+/// patchification (4D instead of 5D) and audio-specific timestep embedding.
 /// Returns the denoised audio latent ready for VAE decoding.
 fn denoise_audio(
     audio_latent: &Tensor,
+    model: &LTXModel,
     context: &Tensor,
-    _timestep: &Tensor,
+    patchify_proj: Option<&tch::nn::Linear>,
     device: Device,
     steps: usize,
     cfg_scale: f64,
 ) -> Tensor {
-    let b = audio_latent.size()[0];
-    let (c, t, f) = (
+    let (c, _t, f) = (
         audio_latent.size()[1],
         audio_latent.size()[2],
         audio_latent.size()[3],
@@ -1046,28 +1084,27 @@ fn denoise_audio(
         let sigma = sigmas[i];
         let next_sigma = sigmas[i + 1];
 
-        // Patchify: (B, C, T, F) -> (B, T, C*F)
+        // Patchify audio: (B, C, T, F) -> (B, T, C*F)
         let patched = ltx_patchify::patchify_audio(&x);
-        let _ts = Tensor::from_slice(&[sigma as f32]).to_device(device);
-
-        // Forward pass
-        let cond_pred = {
-            // Build a simple transformer-like forward for audio
-            // For now, use the velocity prediction directly
-            patched.shallow_clone() * 0.0
+        let projected = if let Some(proj) = patchify_proj {
+            proj.forward_t(&patched, false)
+        } else {
+            patched
         };
+
+        // Create audio timestep (same sigma schedule as video)
+        let timestep = Tensor::from_slice(&[sigma as f32]).to_device(device);
+
+        // Conditional forward: use text context
+        let cond_pred = model.forward(&projected, &timestep, context, None, None);
+
+        // Unconditional forward: empty context for CFG
         let uncond_context =
             Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
-        let _ = (&uncond_context, &cond_pred); // Suppress unused warnings
+        let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
 
-        // Compute velocity prediction (simplified — real impl would use transformer)
-        let velocity = Tensor::randn([b, c * f, t], (Kind::Float, device)) * 0.1;
-
-        // Convert to denoised: x0 = x - v * sigma
-        let denoised = &x - &velocity * sigma;
-
-        // Apply guidance
-        let guided = guider.guide(&denoised, &denoised); // Placeholder
+        // Apply classifier-free guidance
+        let guided = guider.guide(&cond_pred, &uncond_pred);
 
         // Unpatchify: (B, T, C*F) -> (B, C, T, F)
         let unpatched = ltx_patchify::unpatchify_audio(&guided, c, f);
