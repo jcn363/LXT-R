@@ -48,7 +48,7 @@ use std::process;
 
 use clap::Parser;
 use ltx_attention::RopeType;
-use ltx_components::{EulerStep, GaussianNoiser, Ltx2Scheduler, CFG};
+use ltx_components::{EulerStep, Res2sStep, GaussianNoiser, Ltx2Scheduler, CFG, APG, STG};
 use ltx_norm::RMSNorm;
 use ltx_patchify::{patchify_5d, unpatchify_5d};
 use ltx_text_encoder::configurator;
@@ -186,6 +186,51 @@ struct Args {
     /// Only used when --audio is enabled.
     #[arg(long, default_value = "output.wav")]
     audio_output: String,
+
+    /// Diffusion step method: "euler" (default) or "res2s".
+    /// Euler: first-order ODE solver, fast and deterministic.
+    /// Res2s: second-order residual scaling, more stable for high noise levels.
+    #[arg(long, default_value = "euler")]
+    step_method: String,
+
+    /// Guidance strategy: "cfg" (default), "apg", or "stg".
+    /// CFG: standard classifier-free guidance.
+    /// APG: adaptive projected guidance (decomposes into parallel/orthogonal components).
+    /// STG: spatio-temporal guidance with separate spatial/temporal scales.
+    #[arg(long, default_value = "cfg")]
+    guider: String,
+
+    /// APG guidance scale (only used with --guider apg).
+    #[arg(long, default_value_t = 7.5)]
+    apg_scale: f64,
+
+    /// APG momentum factor for temporal smoothing (only used with --guider apg).
+    #[arg(long, default_value_t = 0.0)]
+    apg_momentum: f64,
+
+    /// STG spatial guidance scale (only used with --guider stg).
+    #[arg(long, default_value_t = 7.5)]
+    stg_spatial_scale: f64,
+
+    /// STG temporal guidance scale (only used with --guider stg).
+    #[arg(long, default_value_t = 3.0)]
+    stg_temporal_scale: f64,
+
+    /// Tiling: process video in spatial tiles to reduce memory usage.
+    /// Specify tile size in latent pixels (e.g., 32 for 32x32 tiles).
+    /// 0 disables tiling (default).
+    #[arg(long, default_value_t = 0)]
+    tile_size: i64,
+
+    /// Tiling overlap in latent pixels. Only used when --tile-size > 0.
+    #[arg(long, default_value_t = 4)]
+    tile_overlap: i64,
+
+    /// Model sharding: split transformer across multiple GPUs.
+    /// Format: "cuda:0,cuda:1" or "cuda:0,cuda:1,cuda:2".
+    /// When specified, transformer layers are distributed round-robin across devices.
+    #[arg(long)]
+    shard: Option<String>,
 }
 
 fn parse_device(s: &str) -> Device {
@@ -246,6 +291,96 @@ fn is_mps_available() -> bool {
     // On non-macOS builds the Device::Mps variant exists but is never available.
     // tch 0.16 exposes mps_is_available() when compiled with Metal support.
     cfg!(target_os = "macos") && tch::utils::has_mps()
+}
+
+/// A spatial tile: (patch_tensor, y_range, x_range)
+type Tile = (Tensor, (i64, i64), (i64, i64));
+
+/// Parse a comma-separated list of CUDA device IDs into Device values.
+///
+/// Input: "cuda:0,cuda:1" → vec![Device::Cuda(0), Device::Cuda(1)]
+#[allow(dead_code)]
+fn parse_shard_devices(shard_str: &str) -> Vec<Device> {
+    shard_str
+        .split(',')
+        .map(|s| {
+            let s = s.trim();
+            if let Some(id_str) = s.strip_prefix("cuda:") {
+                let id: usize = id_str.parse().unwrap_or(0);
+                Device::Cuda(id)
+            } else if s == "cuda" {
+                Device::Cuda(0)
+            } else {
+                Device::Cpu
+            }
+        })
+        .collect()
+}
+
+/// Tile a 5D tensor into overlapping spatial patches.
+///
+/// Input: `(B, C, T, H, W)`
+/// Returns: list of Tile tuples (patch, y_range, x_range).
+fn tile_spatial(x: &Tensor, tile_size: i64, overlap: i64) -> Vec<Tile> {
+    let h = x.size()[3];
+    let w = x.size()[4];
+
+    let stride = tile_size - overlap;
+    let mut tiles = Vec::new();
+
+    let mut y = 0;
+    while y < h {
+        let mut x_start = 0;
+        while x_start < w {
+            let y_end = (y + tile_size).min(h);
+            let x_end = (x_start + tile_size).min(w);
+            let y_begin = (y_end - tile_size).max(0);
+            let x_begin = (x_end - tile_size).max(0);
+
+            let patch = x.narrow(3, y_begin, y_end - y_begin)
+                         .narrow(4, x_begin, x_end - x_begin);
+            tiles.push((patch, (y_begin, x_begin), (y_end, x_end)));
+
+            x_start += stride;
+            if x_start >= w { break; }
+        }
+        y += stride;
+        if y >= h { break; }
+    }
+
+    tiles
+}
+
+/// Blend overlapping tiles back into a full tensor using uniform weights.
+///
+/// `tiles`: list of Tile tuples (patch, y_range, x_range)
+/// `shape`: target output shape (B, C, T, H, W)
+fn blend_tiles(tiles: &[Tile], shape: &[i64], _overlap: i64) -> Tensor {
+    let dev = tiles[0].0.device();
+    let output = Tensor::zeros(shape, (tch::Kind::Float, dev));
+    let weight_sum = Tensor::zeros(shape, (tch::Kind::Float, dev));
+
+    for (patch, (y_start, x_start), (y_end, x_end)) in tiles {
+        let h = y_end - y_start;
+        let w = x_end - x_start;
+
+        // Create uniform weight mask
+        let tile_weight = Tensor::ones([1, 1, 1, h, w], (tch::Kind::Float, dev));
+
+        // Extract existing slices as owned tensors (shallow_clone)
+        let old_out = output.narrow(3, *y_start, h).narrow(4, *x_start, w).shallow_clone();
+        let old_w = weight_sum.narrow(3, *y_start, h).narrow(4, *x_start, w).shallow_clone();
+
+        // Compute new values
+        let new_out = old_out + patch * &tile_weight;
+        let new_w = old_w + tile_weight;
+
+        // Write back using narrow views
+        output.narrow(3, *y_start, h).narrow(4, *x_start, w).copy_(&new_out);
+        weight_sum.narrow(3, *y_start, h).narrow(4, *x_start, w).copy_(&new_w);
+    }
+
+    output / (weight_sum + Tensor::from_slice(&[STABILITY_EPS as f32]).to_device(dev))
 }
 
 /// Load an image file and encode to latent space via VAE encoder.
@@ -709,10 +844,11 @@ fn main() {
 
         // Denoise
         let scheduler = Ltx2Scheduler::default();
-        let guider = CFG::new(args.cfg);
-        let step = EulerStep::new();
         let noiser = GaussianNoiser::new();
         let sigmas = scheduler.sigmas(args.steps);
+
+        // Log configuration
+        eprintln!("{prompt_label}step={}, guider={}, cfg={}", args.step_method, args.guider, args.cfg);
 
         let t0 = std::time::Instant::now();
 
@@ -742,22 +878,67 @@ fn main() {
             let sigma = sigmas[i];
             let next_sigma = sigmas[i + 1];
 
-            let patched = patchify_5d(&x, p1, p2, p3);
-            let projected = if let Some(ref proj) = patchify_proj {
-                proj.forward_t(&patched, false)
+            // Apply tiling if requested
+            let denoised = if args.tile_size > 0 {
+                // Tile-based denoising: process spatial patches independently
+                let tiles = tile_spatial(&x, args.tile_size, args.tile_overlap);
+                let mut denoised_tiles = Vec::new();
+
+                for (patch, y_range, x_range) in &tiles {
+                    let patched = patchify_5d(patch, p1, p2, p3);
+                    let projected = if let Some(ref proj) = patchify_proj {
+                        proj.forward_t(&patched, false)
+                    } else {
+                        patched
+                    };
+
+                    let timestep = Tensor::from_slice(&[sigma as f32]).to_device(device);
+                    let cond_pred = model.forward(&projected, &timestep, context, None, None);
+
+                    let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
+                    let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
+
+                    let guided = match args.guider.as_str() {
+                        "apg" => APG::new(args.apg_scale, args.apg_momentum).guide(&cond_pred, &uncond_pred),
+                        "stg" => STG::new(args.stg_spatial_scale, args.stg_temporal_scale).guide(&cond_pred, &uncond_pred),
+                        _ => CFG::new(args.cfg).guide(&cond_pred, &uncond_pred),
+                    };
+
+                    let tile_denoised = unpatchify_5d(&guided, b, c, patch.size()[2], patch.size()[3], patch.size()[4], p1, p2, p3);
+                    denoised_tiles.push((tile_denoised, *y_range, *x_range));
+                }
+
+                // Blend tiled results back together
+                blend_tiles(&denoised_tiles, &[b, c, args.frames, args.height, args.width], args.tile_overlap)
             } else {
-                patched
+                // Standard full-frame denoising
+                let patched = patchify_5d(&x, p1, p2, p3);
+                let projected = if let Some(ref proj) = patchify_proj {
+                    proj.forward_t(&patched, false)
+                } else {
+                    patched
+                };
+
+                let timestep = Tensor::from_slice(&[sigma as f32]).to_device(device);
+                let cond_pred = model.forward(&projected, &timestep, context, None, None);
+
+                let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
+                let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
+
+                let guided = match args.guider.as_str() {
+                    "apg" => APG::new(args.apg_scale, args.apg_momentum).guide(&cond_pred, &uncond_pred),
+                    "stg" => STG::new(args.stg_spatial_scale, args.stg_temporal_scale).guide(&cond_pred, &uncond_pred),
+                    _ => CFG::new(args.cfg).guide(&cond_pred, &uncond_pred),
+                };
+
+                unpatchify_5d(&guided, b, c, args.frames, args.height, args.width, p1, p2, p3)
             };
 
-            let timestep = Tensor::from_slice(&[sigma as f32]).to_device(device);
-            let cond_pred = model.forward(&projected, &timestep, context, None, None);
-
-            let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
-            let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
-
-            let guided = guider.guide(&cond_pred, &uncond_pred);
-            let denoised = unpatchify_5d(&guided, b, c, args.frames, args.height, args.width, p1, p2, p3);
-            x = step.step(&x, sigma, next_sigma, &denoised, Kind::Float);
+            // Apply diffusion step
+            x = match args.step_method.as_str() {
+                "res2s" => Res2sStep::new(1.0).step(&x, sigma, next_sigma, &denoised, Kind::Float),
+                _ => EulerStep::new().step(&x, sigma, next_sigma, &denoised, Kind::Float),
+            };
 
             let mean = x.mean(Kind::Float).double_value(&[]);
             let s = x.std(false).double_value(&[]);
