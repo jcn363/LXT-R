@@ -79,6 +79,12 @@ struct Args {
     ///   cuda    — NVIDIA GPU 0 (falls back to CPU if unavailable)
     ///   cuda:N  — NVIDIA GPU N
     ///   mps     — Apple Metal Performance Shaders (macOS only)
+    ///
+    /// When using GPU, transformer weights are loaded directly onto the device
+    /// and all denoising steps run on GPU. Text encoding still runs on CPU
+    /// (memory-efficient: encode then free the ~18GB encoder before loading
+    /// the transformer). The encoded context is copied to GPU once before
+    /// the denoising loop begins.
     #[arg(long, default_value = "auto")]
     device: String,
 
@@ -539,7 +545,10 @@ fn main() {
     }
 
     let n_params: usize = vs.variables().values().map(|t| t.numel()).sum();
-    eprintln!("ready: {dim}d, {num_layers} layers, {:.1}M params", n_params as f64 / 1e6);
+    eprintln!("ready: {dim}d, {num_layers} layers, {:.1}M params on {device:?}", n_params as f64 / 1e6);
+    if device != Device::Cpu {
+        eprintln!("GPU mode: transformer weights and all denoising tensors on-device");
+    }
 
     // Phase 2: Pre-encode all prompts (load text encoder once, encode, free)
     let has_encoder = args.tokenizer.is_some() && args.text_weights.is_some();
@@ -566,6 +575,17 @@ fn main() {
         }
         let elapsed = t0.elapsed().as_secs_f64();
         eprintln!("encoding complete in {elapsed:.1}s");
+
+        // Move context tensors to the target device for GPU-accelerated denoising.
+        // The text encoder runs on CPU (and is freed immediately after encoding)
+        // to minimize peak memory. The encoded context is small enough to copy
+        // to GPU once, avoiding per-step CPU↔GPU transfers during the denoising loop.
+        ctxs.iter_mut().for_each(|ctx| {
+            if ctx.device() != device {
+                *ctx = ctx.to_device(device);
+            }
+        });
+
         ctxs
     } else {
         eprintln!("no text encoder — using random contexts");
@@ -683,7 +703,7 @@ fn main() {
                 patched
             };
 
-            let timestep = Tensor::from_slice(&[sigma as f32]);
+            let timestep = Tensor::from_slice(&[sigma as f32]).to_device(device);
             let cond_pred = model.forward(&projected, &timestep, context, None, None);
 
             let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
