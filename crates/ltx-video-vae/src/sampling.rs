@@ -20,6 +20,19 @@ pub fn depth_to_space(x: &Tensor, r: i64) -> Tensor {
         .reshape([b, c, t, hdiv * r, wdiv * r])
 }
 
+/// 3D depth-to-space: `(B, C·r³, T/r, H/r, W/r)` → `(B, C, T, H, W)`.
+///
+/// Packs each r×r×r volumetric block into the channel dimension.
+/// Used by the decoder `compress_all` upsampling blocks.
+pub fn depth_to_space_3d(x: &Tensor, r: i64) -> Tensor {
+    let (b, crrr, tdiv, hdiv, wdiv) = x.size5().expect("depth_to_space_3d: tensor must be 5D");
+    let c = crrr / (r * r * r);
+    // [B, c, r, r, r, T/r, H/r, W/r] → permute to [B, c, T/r, r, H/r, r, W/r, r] → [B, c, T, H, W]
+    x.reshape([b, c, r, r, r, tdiv, hdiv, wdiv])
+        .permute([0, 1, 5, 2, 6, 3, 7, 4])
+        .reshape([b, c, tdiv * r, hdiv * r, wdiv * r])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,9 +1,6 @@
-use std::borrow::Borrow;
-
 use tch::nn::{ModuleT, Path};
 use tch::Tensor;
 
-use ltx_conv::make_conv_nd;
 use ltx_norm::build_norm_layer;
 use ltx_resblock::make_resblock;
 use ltx_types::NormLayerType;
@@ -63,7 +60,7 @@ impl SpatialConv3d {
         let pad_t = (k[2] - 1) / 2;
         let pad_h = (k[3] - 1) / 2;
         let pad_w = (k[4] - 1) / 2;
-        x.conv3d(&self.weight, Some(&self.bias), &[1, 2, 2], &[pad_t, pad_h, pad_w], &[1, 1, 1], 1)
+        x.conv3d(&self.weight, Some(&self.bias), [1, 2, 2], [pad_t, pad_h, pad_w], [1, 1, 1], 1)
     }
 
     pub fn forward_spatial1(&self, x: &Tensor) -> Tensor {
@@ -71,7 +68,7 @@ impl SpatialConv3d {
         let pad_t = (k[2] - 1) / 2;
         let pad_h = (k[3] - 1) / 2;
         let pad_w = (k[4] - 1) / 2;
-        x.conv3d(&self.weight, Some(&self.bias), &[1, 1, 1], &[pad_t, pad_h, pad_w], &[1, 1, 1], 1)
+        x.conv3d(&self.weight, Some(&self.bias), [1, 1, 1], [pad_t, pad_h, pad_w], [1, 1, 1], 1)
     }
 }
 

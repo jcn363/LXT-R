@@ -13,9 +13,7 @@ const CKPT: &str = "ltx-video-2b-v0.9.1.safetensors";
 
 #[test]
 fn test_full_roundtrip_encoder_only() {
-    // Full roundtrip requires decoder to work too, but the decoder has a known
-    // channel flow issue (ConvUpsample output channels don't match next ResBlock
-    // stage). Test encoder-only path for now.
+    // Encoder-only smoke test.
     let vs_e = tch::nn::VarStore::new(tch::Device::Cpu);
     let encoder = build_encoder(&(vs_e.root() / "encoder"), NormLayerType::Group, 32, false);
     load_vae_weights(&vs_e, &weights_path(CKPT), "vae.");
