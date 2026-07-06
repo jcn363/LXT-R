@@ -340,7 +340,7 @@ fn decode_via_vae(
     device: Device,
 ) -> Result<Tensor, String> {
     let vs = tch::nn::VarStore::new(device);
-    let decoder = build_decoder(&vs.root(), NormLayerType::Group, 32, false);
+    let decoder = build_decoder(&(vs.root() / "decoder"), NormLayerType::Group, 32, false);
 
     eprintln!("loading VAE decoder weights from {vae_weights_path}...");
     let loaded = load_vae_weights(&vs, vae_weights_path, "vae.");
@@ -348,6 +348,16 @@ fn decode_via_vae(
 
     // Default decode timestep (matches Python: decode_timestep = 0.05)
     let timestep = Tensor::from_slice(&[0.05f32]).to_device(device);
+
+    // Validate latent shape: decoder expects (B, 128, T, H, W)
+    let channels = latent.size()[1];
+    if channels != 128 {
+        return Err(format!(
+            "VAE decoder expects 128-channel latent, got {channels} channels. \
+             Ensure the diffusion pipeline produces a 128-dim latent (use real transformer weights)."
+        ));
+    }
+
     let pixel = decoder.forward(latent, &timestep);
 
     // Free decoder weights
