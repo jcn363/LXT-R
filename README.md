@@ -355,8 +355,8 @@ crates/
 ### P10: Benchmarking + Optimization
 - Profile denoising throughput (frames/sec at various resolutions)
 - Memory profiling on GPU
-- INT4 quantization (CLI flag exists, not yet wired)
-- Model sharding for multi-GPU (CLI flag parsed, round-robin distribution planned)
+- INT4 weight quantization for reduced VRAM usage
+- Multi-GPU model sharding (round-robin layer distribution)
 
 ### Completed in This Session
 - ✅ VAE decoder rewrite to match Python checkpoint (7 up_blocks, CompressAllUpsample, AdaLN)
