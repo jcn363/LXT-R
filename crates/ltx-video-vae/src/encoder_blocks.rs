@@ -70,6 +70,14 @@ impl SpatialConv3d {
         let pad_w = (k[4] - 1) / 2;
         x.conv3d(&self.weight, Some(&self.bias), [1, 1, 1], [pad_t, pad_h, pad_w], [1, 1, 1], 1)
     }
+
+    pub fn forward_all2(&self, x: &Tensor) -> Tensor {
+        let k = self.weight.size();
+        let pad_t = (k[2] - 1) / 2;
+        let pad_h = (k[3] - 1) / 2;
+        let pad_w = (k[4] - 1) / 2;
+        x.conv3d(&self.weight, Some(&self.bias), [2, 2, 2], [pad_t, pad_h, pad_w], [1, 1, 1], 1)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -85,14 +93,14 @@ impl DownsampleConv {
 }
 
 // ---------------------------------------------------------------------------
-// Block 2/5: Channel-change downsample with shortcut + GroupNorm
+// Block 2/5: Channel-change ResBlock (no spatial change, just channels)
 // ---------------------------------------------------------------------------
 
 pub struct ChannelChangeDownsample {
     norm: Box<dyn ModuleT>,
-    conv1: SpatialConv3d,   // stride (1,2,2)
+    conv1: SpatialConv3d,   // stride (1,1,1)
     conv2: SpatialConv3d,   // stride (1,1,1)
-    shortcut: SpatialConv3d, // stride (1,2,2) to match conv1
+    shortcut: SpatialConv3d, // stride (1,1,1) to match conv1
 }
 
 impl std::fmt::Debug for ChannelChangeDownsample {
@@ -114,8 +122,8 @@ impl ChannelChangeDownsample {
 impl ModuleT for ChannelChangeDownsample {
     fn forward_t(&self, x: &Tensor, _train: bool) -> Tensor {
         let h = self.norm.forward_t(x, false).silu();
-        let residual = self.shortcut.forward_spatial2(&h);
-        let h = self.conv1.forward_spatial2(&h);
+        let residual = self.shortcut.forward_spatial1(&h);
+        let h = self.conv1.forward_spatial1(&h);
         let h = self.conv2.forward_spatial1(&h);
         h + residual
     }
@@ -141,7 +149,7 @@ impl EncoderStage {
                 }
                 h
             }
-            Self::DownsampleConv(c) => c.forward_spatial2(x),
+            Self::DownsampleConv(c) => c.forward_all2(x),
             Self::ChannelChange(c) => c.forward_t(x, false),
         }
     }

@@ -17,15 +17,15 @@ pub const SAMPLED_LATENT_CHANNELS: i64 = 128;
 
 /// Default encoder block descriptors matching the Python LTX-Video VAE.
 ///
-/// 10 blocks:
+/// 10 blocks (Python uses compress_all stride 2,2,2 + res_x_y channel-only):
 ///   0: ResBlocks x4, ch=128
-///   1: DownsampleConv, in=128, out=128
-///   2: ChannelChangeDownsample, in=128, out=256
+///   1: compress_all, ch=128 (spatial+temporal stride 2)
+///   2: res_x_y, ch=128→256 (channels only, NO spatial change)
 ///   3: ResBlocks x3, ch=256
-///   4: DownsampleConv, in=256, out=256
-///   5: ChannelChangeDownsample, in=256, out=512
+///   4: compress_all, ch=256 (spatial+temporal stride 2)
+///   5: res_x_y, ch=256→512 (channels only, NO spatial change)
 ///   6: ResBlocks x3, ch=512
-///   7: DownsampleConv, in=512, out=512
+///   7: compress_all, ch=512 (spatial+temporal stride 2)
 ///   8: ResBlocks x3, ch=512
 ///   9: ResBlocks x4, ch=512
 pub fn default_encoder_block_descs() -> Vec<EncoderBlockDesc> {

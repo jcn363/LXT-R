@@ -20,7 +20,7 @@ fn test_full_roundtrip_encoder_only() {
 
     let input = tch::Tensor::randn([1, 3, 4, 256, 256], (tch::Kind::Float, tch::Device::Cpu));
     let latent = encoder.encode_mean(&input);
-    assert_eq!(latent.size(), vec![1, 128, 4, 2, 2]);
+    assert_eq!(latent.size(), vec![1, 128, 1, 8, 8]);
     eprintln!("encoder roundtrip: {:?} -> {:?}", input.size(), latent.size());
 }
 
@@ -42,11 +42,11 @@ fn test_encoder_forward_shape() {
     // Input: (1, 3, 4, 256, 256) — must be divisible by 32
     let input = tch::Tensor::randn([1, 3, 4, 256, 256], (tch::Kind::Float, tch::Device::Cpu));
     let raw = encoder.forward(&input);
+    eprintln!("encoder forward: {:?}", raw.size());
     // space_to_depth(r=4): 256/4 = 64 spatial
-    // 5 stride-2 stages: 64 → 32 → 16 → 8 → 4 → 2
-    // Temporal preserved at 4 (stride=(1,2,2))
+    // 3 compress_all blocks with stride (2,2,2): T 4→2→1, spatial 64→32→16→8
     // conv_out: 512 → 129
-    assert_eq!(raw.size(), vec![1, 129, 4, 2, 2]);
+    assert_eq!(raw.size(), vec![1, 129, 1, 8, 8]);
 }
 
 #[test]
@@ -56,8 +56,8 @@ fn test_encoder_encode_mean_shape() {
     load_vae_weights(&vs, &weights_path(CKPT), "vae.");
     let input = tch::Tensor::randn([1, 3, 4, 256, 256], (tch::Kind::Float, tch::Device::Cpu));
     let latent = encoder.encode_mean(&input);
-    // encode_mean takes first 128 of 129 channels
-    assert_eq!(latent.size(), vec![1, 128, 4, 2, 2]);
+    eprintln!("encode_mean: {:?}", latent.size());
+    assert_eq!(latent.size(), vec![1, 128, 1, 8, 8]);
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn test_full_roundtrip() {
 
     let input = tch::Tensor::randn([1, 3, 4, 256, 256], (tch::Kind::Float, tch::Device::Cpu));
     let latent = encoder.encode_mean(&input);
-    assert_eq!(latent.size(), vec![1, 128, 4, 2, 2]);
+    assert_eq!(latent.size(), vec![1, 128, 1, 8, 8]);
 
     let timestep = tch::Tensor::from_slice(&[1000.0f32]);
     let output = decoder.forward(&latent, &timestep);
