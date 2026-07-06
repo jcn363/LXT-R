@@ -913,9 +913,11 @@ fn save_frames(x: &Tensor, dir: &std::path::Path, frames: i64, h: i64, w: i64) {
         let frame = pixel.narrow(2, i, 1).reshape([3, h, w]).permute([1, 2, 0]);
         let path = dir.join(format!("frame_{i:04}.png"));
 
-        // Convert tensor to image::RgbBuffer
+        // Flatten to contiguous [h*w*3] before extracting values
+        let flat = frame.reshape([h * w * 3]);
+        let frame_bytes: Vec<u8> = (0..flat.size()[0]).map(|j| flat.double_value(&[j]) as u8).collect();
+
         let mut img = image::ImageBuffer::new(w as u32, h as u32);
-        let frame_bytes: Vec<u8> = (0..h * w * 3).map(|j| frame.double_value(&[j]) as u8).collect();
         for (pixel_out, rgb) in img.pixels_mut().zip(frame_bytes.chunks(3)) {
             *pixel_out = image::Rgb([rgb[0], rgb[1], rgb[2]]);
         }
