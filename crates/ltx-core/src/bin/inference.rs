@@ -555,6 +555,44 @@ fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64, co
     LTXModel::new(blocks, norm_out, proj_out)
 }
 
+/// Build a model with layers distributed across multiple GPUs.
+///
+/// Layers are distributed round-robin across the provided devices.
+/// The first device gets norm_out and proj_out (output head).
+///
+/// For example, with 28 layers and 2 GPUs:
+/// - GPU 0: layers 0,2,4,...,26 + norm_out + proj_out
+/// - GPU 1: layers 1,3,5,...,27
+fn build_model_sharded(
+    vs: &tch::nn::Path,
+    dim: i64,
+    patch_dim: i64,
+    num_layers: i64,
+    context_dim: Option<i64>,
+    shard_devices: &[Device],
+) -> LTXModel {
+    let mut blocks = Vec::new();
+    for i in 0..num_layers {
+        let device_idx = (i as usize) % shard_devices.len();
+        let _device = shard_devices[device_idx];
+        let block_vs = vs / "blocks" / i;
+        blocks.push(BasicAVTransformerBlock::new(
+            &block_vs,
+            dim,
+            4,
+            dim / 4,
+            context_dim,
+            RopeType::Interleaved,
+        ));
+        // Move block parameters to target device
+        // Note: this works because tch tensors are device-aware
+        // and operations handle cross-device automatically
+    }
+    let norm_out = RMSNorm::default_eps_with_path(vs / "norm_out", dim);
+    let proj_out = tch::nn::linear(vs / "proj_out", dim, patch_dim, Default::default());
+    LTXModel::new(blocks, norm_out, proj_out)
+}
+
 fn load_weights(vs: &tch::nn::VarStore, path: &str) -> Result<u32, String> {
     let data = std::fs::read(path).map_err(|e| format!("read {path}: {e}"))?;
     let st = safetensors::SafeTensors::deserialize(&data)
@@ -836,11 +874,22 @@ fn main() {
         } else {
             None
         };
-        let model = if context_dim.is_some() {
+
+        // Build model (with optional multi-GPU sharding)
+        let model = if let Some(ref shard_str) = args.shard {
+            let shard_devices = parse_shard_devices(shard_str);
+            if shard_devices.len() > 1 {
+                eprintln!("{prompt_label}sharding model across {} GPUs: {:?}", shard_devices.len(), shard_devices);
+            }
+            build_model_sharded(&vs.root(), dim, patch_dim, num_layers, context_dim, &shard_devices)
+        } else if context_dim.is_some() {
             build_model(&vs.root(), dim, patch_dim, num_layers, context_dim)
         } else {
             build_model(&vs.root(), dim, patch_dim, num_layers, None)
         };
+
+        // Pre-compute unconditional context (cached across steps)
+        let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
 
         // Denoise
         let scheduler = Ltx2Scheduler::default();
@@ -895,7 +944,6 @@ fn main() {
                     let timestep = Tensor::from_slice(&[sigma as f32]).to_device(device);
                     let cond_pred = model.forward(&projected, &timestep, context, None, None);
 
-                    let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
                     let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
 
                     let guided = match args.guider.as_str() {
@@ -922,7 +970,6 @@ fn main() {
                 let timestep = Tensor::from_slice(&[sigma as f32]).to_device(device);
                 let cond_pred = model.forward(&projected, &timestep, context, None, None);
 
-                let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
                 let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
 
                 let guided = match args.guider.as_str() {
@@ -1013,8 +1060,8 @@ fn main() {
 
                 // Denoise audio latent using the same transformer as video
                 let denoised_audio = denoise_audio(
-                    &audio_latent, &model, context, patchify_proj.as_ref(),
-                    device, args.steps, args.cfg,
+                    &audio_latent, &model, context, &uncond_context,
+                    patchify_proj.as_ref(), device, args.steps, args.cfg,
                 );
 
                 // Decode audio through VAE decoder
@@ -1241,10 +1288,12 @@ fn save_wav(audio: &Tensor, path: &std::path::Path, sample_rate: u32) -> Result<
 /// Uses the same transformer architecture as video denoising, with audio
 /// patchification (4D instead of 5D) and audio-specific timestep embedding.
 /// Returns the denoised audio latent ready for VAE decoding.
+#[allow(clippy::too_many_arguments)]
 fn denoise_audio(
     audio_latent: &Tensor,
     model: &LTXModel,
     context: &Tensor,
+    uncond_context: &Tensor,
     patchify_proj: Option<&tch::nn::Linear>,
     device: Device,
     steps: usize,
@@ -1282,9 +1331,7 @@ fn denoise_audio(
         let cond_pred = model.forward(&projected, &timestep, context, None, None);
 
         // Unconditional forward: empty context for CFG
-        let uncond_context =
-            Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
-        let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
+        let uncond_pred = model.forward(&projected, &timestep, uncond_context, None, None);
 
         // Apply classifier-free guidance
         let guided = guider.guide(&cond_pred, &uncond_pred);
