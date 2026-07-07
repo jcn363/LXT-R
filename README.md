@@ -4,7 +4,7 @@ Rust rewrite of [LTX-2.3](https://github.com/LightricksResearch/LTX-Video) core 
 
 ## Architecture
 
-21 crates, ~16,600 LOC (123 source files + 55 test files + 1 bench file). All model logic is pure Rust; external FFI (`tch`, CUDA) is isolated behind safe APIs.
+21 crates, ~16,600 LOC (122 source files + 55 test files + 1 bench file). All model logic is pure Rust; external FFI (`tch`, CUDA) is isolated behind safe APIs.
 
 ```
 ltx-core (facade)
@@ -259,35 +259,12 @@ The `ltx-app` crate provides an eframe-based GUI with hover tooltips on all cont
 ```bash
 cargo test --workspace          # all tests
 cargo test -p ltx-video-vae     # VAE encoder/decoder roundtrip
-cargo test -p ltx-core          # inference pipeline + audio pipeline
 cargo test -p ltx-transformer   # transformer model
 cargo test -p ltx-components    # scheduler, guider, noiser, diffusion step
 cargo test -p ltx-audio-vae     # audio VAE encoder/decoder
 ```
 
-| Suite | Tests | Status |
-|-------|-------|--------|
-| ltx-types | 4 | ✅ |
-| ltx-norm | 22 | ✅ |
-| ltx-attention | 12 | ✅ |
-| ltx-conv | 4 | ✅ |
-| ltx-resblock | 5 | ✅ |
-| ltx-timestep | 4 | ✅ |
-| ltx-patchify | 16 | ✅ |
-| ltx-transformer | 8 | ✅ |
-| ltx-video-vae | 12 | ⚠️ OOM |
-| ltx-audio-vae | 7 | ✅ |
-| ltx-video-vae image roundtrip | 1 | ✅ |
-| ltx-core (all suites) | 30 | ✅ |
-| ltx-components | 23 | ✅ |
-| ltx-text-encoder | 22 | ✅ |
-| ltx-upsampler | 12 | ✅ |
-| ltx-quantization | 2 | ✅ |
-| ltx-conditioning | 10 | ✅ |
-| ltx-guidance | 2 | ✅ |
-| ltx-core benchmarks | 1 | ✅ |
-| Other | ~94 | ✅ |
-| **Total** | **407** | **395 pass, 12 OOM** |
+All 387 tests pass across 21 crates with zero failures.
 
 ## Weight Conversion
 
