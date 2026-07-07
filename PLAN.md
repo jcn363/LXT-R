@@ -1266,7 +1266,7 @@ All depend on: ───────┘
 
 Each shared primitive gets tested once, then reused. Tests live in each crate's `tests/` directory — see `crates/*/tests/` for current coverage.
 
-- **Current**: Structural correctness (compilation, type checking) via `cargo test --workspace` (480 tests)
+- **Current**: Structural correctness (compilation, type checking) via `cargo test --workspace` (407 tests; 395 pass, 12 OOM in ltx-video-vae)
 - **Implemented**: Golden `.safetensors` comparison tests verified against reference output via `ltx_test_utils::load_golden`
 
 ---

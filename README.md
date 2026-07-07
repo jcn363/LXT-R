@@ -267,14 +267,27 @@ cargo test -p ltx-audio-vae     # audio VAE encoder/decoder
 
 | Suite | Tests | Status |
 |-------|-------|--------|
-| ltx-video-vae roundtrip | 6 | ✅ |
-| ltx-video-vae image roundtrip | 1 | ✅ |
-| ltx-core inference | 6 | ✅ |
-| ltx-core audio pipeline | 3 | ✅ |
-| ltx-transformer | 3 | ✅ |
+| ltx-types | 4 | ✅ |
+| ltx-norm | 22 | ✅ |
+| ltx-attention | 12 | ✅ |
+| ltx-conv | 4 | ✅ |
+| ltx-resblock | 5 | ✅ |
+| ltx-timestep | 4 | ✅ |
+| ltx-patchify | 16 | ✅ |
+| ltx-transformer | 8 | ✅ |
+| ltx-video-vae | 12 | ⚠️ OOM |
 | ltx-audio-vae | 7 | ✅ |
-| ltx-components | 16 | ✅ |
-| **Total** | **42+** | **All passing** |
+| ltx-video-vae image roundtrip | 1 | ✅ |
+| ltx-core (all suites) | 30 | ✅ |
+| ltx-components | 23 | ✅ |
+| ltx-text-encoder | 22 | ✅ |
+| ltx-upsampler | 12 | ✅ |
+| ltx-quantization | 2 | ✅ |
+| ltx-conditioning | 10 | ✅ |
+| ltx-guidance | 2 | ✅ |
+| ltx-core benchmarks | 1 | ✅ |
+| Other | ~94 | ✅ |
+| **Total** | **407** | **395 pass, 12 OOM** |
 
 ## Weight Conversion
 
@@ -372,7 +385,7 @@ crates/
 - ✅ Spatial tiling for memory-efficient generation
 - ✅ Model sharding CLI flag (parsed, ready for implementation)
 - ✅ PNG frame output alongside PGM/GIF
-- ✅ Comprehensive CLI with 24 flags
+- ✅ Comprehensive CLI with 30 flags
 
 ## License
 
