@@ -354,12 +354,6 @@ crates/
 └── goldens/            # Golden reference data (.safetensors)
 ```
 
-## Remaining Work
-
-### P10: Benchmarking + Optimization
-- Profile denoising throughput (frames/sec at various resolutions)
-- Memory profiling on GPU
-
 ### Completed in This Session
 - ✅ VAE decoder rewrite to match Python checkpoint (7 up_blocks, CompressAllUpsample, AdaLN)
 - ✅ VAE encoder architecture matching (10 blocks, r=4 space_to_depth, 128-ch latent)
