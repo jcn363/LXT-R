@@ -2,6 +2,7 @@
 use ltx_video_vae::configurator::{build_encoder, build_decoder};
 use ltx_video_vae::load_vae_weights;
 use ltx_types::NormLayerType;
+use serial_test::serial;
 
 fn weights_path(name: &str) -> String {
     let root = format!("{}/../..", env!("CARGO_MANIFEST_DIR"));
@@ -11,6 +12,7 @@ fn weights_path(name: &str) -> String {
 const CKPT: &str = "ltx-video-2b-v0.9.1.safetensors";
 
 #[test]
+#[serial]
 fn test_encode_decode_roundtrip_with_image() {
     let no_grad = tch::no_grad_guard();
 
@@ -26,12 +28,8 @@ fn test_encode_decode_roundtrip_with_image() {
     let loaded_d = load_vae_weights(&vs_d, &weights_path(CKPT), "vae.");
     eprintln!("decoder weights: {loaded_d}");
 
-    // Load synthetic 256x256 RGB image as [1, 3, 1, 256, 256]
-    let raw = std::fs::read("/tmp/test_input.raw").expect("read test image");
-    let pixels: Vec<f32> = raw.iter().map(|&b| (b as f32 / 127.5) - 1.0).collect();
-    let input = tch::Tensor::from_slice(&pixels)
-        .reshape([1, 3, 1, 256, 256])
-        .to_kind(tch::Kind::Float);
+    // Generate synthetic 256x256 RGB image as [1, 3, 1, 256, 256]
+    let input = tch::Tensor::randn([1, 3, 1, 256, 256], (tch::Kind::Float, tch::Device::Cpu));
 
     let input_min = input.min().double_value(&[]);
     let input_max = input.max().double_value(&[]);

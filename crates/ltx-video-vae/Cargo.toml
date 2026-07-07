@@ -15,6 +15,7 @@ safetensors = { workspace = true }
 [dev-dependencies]
 serde_json = { workspace = true }
 safetensors = { workspace = true }
+serial_test = "3"
 
 [lints]
 workspace = true

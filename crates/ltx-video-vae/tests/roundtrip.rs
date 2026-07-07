@@ -3,9 +3,14 @@
 /// Strategy: use tiny tensors to avoid OOM on CPU. Tests that need checkpoint
 /// weights use the smallest viable input; tests that verify architecture shape
 /// flow use random weights only.
+///
+/// The checkpoint-loading tests are serialized (`#[serial]`) because each one
+/// loads a ~5.7 GB safetensors file into a VarStore. Running them in parallel
+/// exhausts system RAM on machines with ≤32 GB.
 use ltx_video_vae::configurator::{build_encoder, build_decoder};
 use ltx_video_vae::load_vae_weights;
 use ltx_types::NormLayerType;
+use serial_test::serial;
 
 fn weights_path(name: &str) -> String {
     let root = format!("{}/../..", env!("CARGO_MANIFEST_DIR"));
@@ -19,6 +24,7 @@ const CKPT: &str = "ltx-video-2b-v0.9.1.safetensors";
 // ---------------------------------------------------------------------------
 
 #[test]
+#[serial]
 fn test_encoder_weight_loading() {
     let vs = tch::nn::VarStore::new(tch::Device::Cpu);
     let _encoder = build_encoder(&(vs.root() / "encoder"), NormLayerType::Group, 32, false);
@@ -28,6 +34,7 @@ fn test_encoder_weight_loading() {
 }
 
 #[test]
+#[serial]
 fn test_encoder_forward_shape_small() {
     let vs = tch::nn::VarStore::new(tch::Device::Cpu);
     let encoder = build_encoder(&(vs.root() / "encoder"), NormLayerType::Group, 32, false);
@@ -41,6 +48,7 @@ fn test_encoder_forward_shape_small() {
 }
 
 #[test]
+#[serial]
 fn test_encoder_forward_shape_medium() {
     let vs = tch::nn::VarStore::new(tch::Device::Cpu);
     let encoder = build_encoder(&(vs.root() / "encoder"), NormLayerType::Group, 32, false);
@@ -80,6 +88,7 @@ fn test_decoder_forward_shape_random_weights() {
 }
 
 #[test]
+#[serial]
 fn test_decoder_weight_loading() {
     let vs = tch::nn::VarStore::new(tch::Device::Cpu);
     let _decoder = build_decoder(&(vs.root() / "decoder"), NormLayerType::Group, 32, false);
