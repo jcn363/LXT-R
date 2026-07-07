@@ -22,5 +22,5 @@ pub mod policy;
 
 pub use fp8_mm::FP8Linear;
 pub use int4_mm::INT4Linear;
-pub use int8_mm::{quantize_to_int8_per_tensor, dequantize_int8};
+pub use int8_mm::{dequantize_int8, quantize_to_int8_per_tensor};
 pub use policy::QuantizationPolicy;

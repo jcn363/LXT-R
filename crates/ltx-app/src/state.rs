@@ -54,10 +54,18 @@ impl DeviceKind {
         match self {
             Self::Cpu => "CPU",
             Self::Cuda => {
-                if tch::Cuda::is_available() { "CUDA ✓" } else { "CUDA (unavailable)" }
+                if tch::Cuda::is_available() {
+                    "CUDA ✓"
+                } else {
+                    "CUDA (unavailable)"
+                }
             }
             Self::Rocm => {
-                if tch::Cuda::is_available() { "ROCm ✓" } else { "ROCm (unavailable)" }
+                if tch::Cuda::is_available() {
+                    "ROCm ✓"
+                } else {
+                    "ROCm (unavailable)"
+                }
             }
         }
     }
@@ -91,14 +99,22 @@ pub struct InferenceParams {
 pub enum InferenceState {
     Idle,
     Loading,
-    Denoising { step: usize, total: usize, sigma: f64 },
+    Denoising {
+        step: usize,
+        total: usize,
+        sigma: f64,
+    },
     Decoding,
     Done,
     Error(String),
 }
 
 pub enum GuiEvent {
-    Progress { step: usize, total: usize, sigma: f64 },
+    Progress {
+        step: usize,
+        total: usize,
+        sigma: f64,
+    },
     Decoding,
     FramesReady(Vec<Vec<u8>>),
     Error(String),

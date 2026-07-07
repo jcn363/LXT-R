@@ -82,7 +82,10 @@ mod tests {
     fn test_quantize_all_zeros() {
         let w = Tensor::zeros([16, 32], (tch::Kind::Float, Device::Cpu));
         let (q, inv_scale) = quantize_weight_to_fp8_per_tensor(&w);
-        assert_eq!(q.to_kind(tch::Kind::Float).isnan().any().double_value(&[]), 0.0);
+        assert_eq!(
+            q.to_kind(tch::Kind::Float).isnan().any().double_value(&[]),
+            0.0
+        );
         assert!(inv_scale.double_value(&[]) > 0.0);
     }
 
@@ -110,9 +113,16 @@ mod tests {
     /// Golden test: FP8 quantization with normal weights matches Python.
     #[test]
     fn test_golden_fp8_quantize_normal() {
-        let weight = ltx_test_utils::load_golden("crates/goldens/fp8_quantize_normal.safetensors", "weight");
-        let expected_q = ltx_test_utils::load_golden("crates/goldens/fp8_quantize_normal.safetensors", "quantized");
-        let expected_inv_scale = ltx_test_utils::load_golden("crates/goldens/fp8_quantize_normal.safetensors", "inv_scale");
+        let weight =
+            ltx_test_utils::load_golden("crates/goldens/fp8_quantize_normal.safetensors", "weight");
+        let expected_q = ltx_test_utils::load_golden(
+            "crates/goldens/fp8_quantize_normal.safetensors",
+            "quantized",
+        );
+        let expected_inv_scale = ltx_test_utils::load_golden(
+            "crates/goldens/fp8_quantize_normal.safetensors",
+            "inv_scale",
+        );
 
         let (q, inv_scale) = quantize_weight_to_fp8_per_tensor(&weight);
         let q_f32 = q.to_kind(tch::Kind::Float);

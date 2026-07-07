@@ -75,7 +75,12 @@ impl TransformerAttention {
             num_heads: heads,
             head_dim,
             rope_type,
-            gate_logits: Some(tch::nn::linear(vs / "gate_logits", dim, dim, Default::default())),
+            gate_logits: Some(tch::nn::linear(
+                vs / "gate_logits",
+                dim,
+                dim,
+                Default::default(),
+            )),
         }
     }
 

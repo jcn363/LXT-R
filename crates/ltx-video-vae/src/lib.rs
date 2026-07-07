@@ -53,11 +53,15 @@ pub fn load_vae_weights(vs: &tch::nn::VarStore, path: &str, prefix: &str) -> u32
         if name.contains("per_channel_statistics") {
             // VarStore: {encoder|decoder}.per_channel_statistics/mean_of_means
             // Checkpoint: vae.per_channel_statistics.mean-of-means
-            let stripped = name.trim_start_matches("encoder.").trim_start_matches("decoder.")
-                               .trim_start_matches("encoder/").trim_start_matches("decoder/");
-            let alt = stripped.replace("mean_of_means", "mean-of-means")
-                              .replace("std_of_means", "std-of-means")
-                              .replace('/', ".");
+            let stripped = name
+                .trim_start_matches("encoder.")
+                .trim_start_matches("decoder.")
+                .trim_start_matches("encoder/")
+                .trim_start_matches("decoder/");
+            let alt = stripped
+                .replace("mean_of_means", "mean-of-means")
+                .replace("std_of_means", "std-of-means")
+                .replace('/', ".");
             let alt_ckpt = format!("{prefix}{alt}");
             if load_one(&st, &alt_ckpt, tensor) {
                 loaded += 1;
@@ -126,19 +130,19 @@ pub struct EncoderBlockDesc {
 }
 
 pub enum EncoderBlockKind {
-    ResBlocks(i64),           // num resblocks
-    DownsampleConv,           // stride-2 conv
-    ChannelChangeDownsample,  // stride-2 + channel doubling + shortcut + norm
+    ResBlocks(i64),          // num resblocks
+    DownsampleConv,          // stride-2 conv
+    ChannelChangeDownsample, // stride-2 + channel doubling + shortcut + norm
 }
 
 impl VideoEncoder {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         vs: &tch::nn::Path,
-        conv_in_channels: i64,   // 48 (from space_to_depth r=4)
-        base_channels: i64,      // 128
+        conv_in_channels: i64, // 48 (from space_to_depth r=4)
+        base_channels: i64,    // 128
         block_descs: &[EncoderBlockDesc],
-        conv_out_channels: i64,  // 129
+        conv_out_channels: i64, // 129
         norm_type: NormLayerType,
         norm_groups: i64,
         causal: bool,
@@ -148,7 +152,11 @@ impl VideoEncoder {
             3,
             conv_in_channels,
             base_channels,
-            3, 1, 1, causal, "zeros",
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
         );
 
         let mut blocks = Vec::new();
@@ -156,45 +164,67 @@ impl VideoEncoder {
             let block_vs = vs / format!("down_blocks/{i}");
             let stage = match &desc.kind {
                 EncoderBlockKind::ResBlocks(n) => {
-                    EncoderStage::ResBlocks(
-                        encoder_blocks::make_resblock_stage(
-                            &block_vs, desc.out_ch, *n,
-                            norm_type, norm_groups, causal,
-                        )
-                    )
+                    EncoderStage::ResBlocks(encoder_blocks::make_resblock_stage(
+                        &block_vs,
+                        desc.out_ch,
+                        *n,
+                        norm_type,
+                        norm_groups,
+                        causal,
+                    ))
                 }
-                EncoderBlockKind::DownsampleConv => {
-                    EncoderStage::DownsampleConv(
-                        encoder_blocks::DownsampleConv::new_block(&block_vs, desc.in_ch)
-                    )
-                }
+                EncoderBlockKind::DownsampleConv => EncoderStage::DownsampleConv(
+                    encoder_blocks::DownsampleConv::new_block(&block_vs, desc.in_ch),
+                ),
                 EncoderBlockKind::ChannelChangeDownsample => {
-                    EncoderStage::ChannelChange(
-                        encoder_blocks::ChannelChangeDownsample::new(
-                            &block_vs, desc.in_ch, desc.out_ch,
-                            norm_type, norm_groups,
-                        )
-                    )
+                    EncoderStage::ChannelChange(encoder_blocks::ChannelChangeDownsample::new(
+                        &block_vs,
+                        desc.in_ch,
+                        desc.out_ch,
+                        norm_type,
+                        norm_groups,
+                    ))
                 }
             };
             blocks.push(stage);
         }
 
         // conv_out: last block's output channels → conv_out_channels
-        let last_out = block_descs.last().map(|d| d.out_ch).unwrap_or(base_channels);
+        let last_out = block_descs
+            .last()
+            .map(|d| d.out_ch)
+            .unwrap_or(base_channels);
         let conv_out = make_conv_nd(
             vs / "conv_out",
             3,
             last_out,
             conv_out_channels,
-            3, 1, 1, causal, "zeros",
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
         );
 
         // Per-channel latent normalization
-        let pc_mean = vs.var("per_channel_statistics/mean_of_means", &[128], tch::nn::init::Init::Const(0.0));
-        let pc_std = vs.var("per_channel_statistics/std_of_means", &[128], tch::nn::init::Init::Const(1.0));
+        let pc_mean = vs.var(
+            "per_channel_statistics/mean_of_means",
+            &[128],
+            tch::nn::init::Init::Const(0.0),
+        );
+        let pc_std = vs.var(
+            "per_channel_statistics/std_of_means",
+            &[128],
+            tch::nn::init::Init::Const(1.0),
+        );
 
-        Self { conv_in, blocks, conv_out, pc_mean, pc_std }
+        Self {
+            conv_in,
+            blocks,
+            conv_out,
+            pc_mean,
+            pc_std,
+        }
     }
 
     /// Encode pixel-space video to distribution parameters.
@@ -246,7 +276,7 @@ impl ModuleT for VideoEncoder {
 // VideoDecoder — matches Python LTX-Video checkpoint architecture
 // ---------------------------------------------------------------------------
 
-use decoder_blocks::{DecoderResBlock, CompressAllUpsample, TimestepEmbedding};
+use decoder_blocks::{CompressAllUpsample, DecoderResBlock, TimestepEmbedding};
 
 /// Per-resblock data: the resblock itself + its scale_shift_table parameter.
 struct ResBlockWithMod {
@@ -298,14 +328,28 @@ impl VideoDecoder {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         vs: &Path,
-        in_channels: i64,       // 128
-        base_channels: i64,     // 1024
+        in_channels: i64,   // 128
+        base_channels: i64, // 1024
         norm_type: NormLayerType,
         norm_groups: i64,
         causal: bool,
     ) -> Self {
-        let conv_in = make_conv_nd(vs / "conv_in", 3, in_channels, base_channels, 3, 1, 1, causal, "zeros");
-        let timestep_scale_multiplier = vs.var("timestep_scale_multiplier", &[], tch::nn::init::Init::Const(1.0));
+        let conv_in = make_conv_nd(
+            vs / "conv_in",
+            3,
+            in_channels,
+            base_channels,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
+        let timestep_scale_multiplier = vs.var(
+            "timestep_scale_multiplier",
+            &[],
+            tch::nn::init::Init::Const(1.0),
+        );
         let sinusoidal_dim = 256i64;
 
         // ResBlock stages: block_idx, channels, num_resblocks, inject_noise
@@ -327,40 +371,64 @@ impl VideoDecoder {
             for j in 0..n_res {
                 let rb = DecoderResBlock::new(
                     &(vs / format!("up_blocks/{block_idx}/res_blocks/{j}")),
-                    ch, norm_type, norm_groups, causal, inject_noise,
+                    ch,
+                    norm_type,
+                    norm_groups,
+                    causal,
+                    inject_noise,
                 );
                 let ss = vs.var(
                     &format!("up_blocks/{block_idx}/res_blocks/{j}/scale_shift_table"),
                     &[4, ch],
                     tch::nn::init::Init::Const(0.0),
                 );
-                resblocks.push(ResBlockWithMod { block: rb, scale_shift_table: ss });
+                resblocks.push(ResBlockWithMod {
+                    block: rb,
+                    scale_shift_table: ss,
+                });
             }
-            stages.push(ResBlockStage { time_embedder: te, resblocks });
+            stages.push(ResBlockStage {
+                time_embedder: te,
+                resblocks,
+            });
         }
 
         // CompressAllUpsample blocks: block_idx, in_channels, multiplier, residual
-        let compress_params: &[(usize, i64, i64, bool)] = &[
-            (1, 1024, 2, true),
-            (3, 512, 2, true),
-            (5, 256, 2, true),
-        ];
-        let compress_upsamples: Vec<CompressAllUpsample> = compress_params.iter()
+        let compress_params: &[(usize, i64, i64, bool)] =
+            &[(1, 1024, 2, true), (3, 512, 2, true), (5, 256, 2, true)];
+        let compress_upsamples: Vec<CompressAllUpsample> = compress_params
+            .iter()
             .map(|&(block_idx, in_ch, mult, res)| {
                 CompressAllUpsample::new(
                     &(vs / format!("up_blocks/{block_idx}")),
-                    in_ch, mult, causal, res,
+                    in_ch,
+                    mult,
+                    causal,
+                    res,
                 )
             })
             .collect();
 
-        let last_time_embedder = TimestepEmbedding::new(&(vs / "last_time_embedder"), sinusoidal_dim, sinusoidal_dim);
-        let last_scale_shift_table = vs.var("last_scale_shift_table", &[2, 128], tch::nn::init::Init::Const(0.0));
+        let last_time_embedder =
+            TimestepEmbedding::new(&(vs / "last_time_embedder"), sinusoidal_dim, sinusoidal_dim);
+        let last_scale_shift_table = vs.var(
+            "last_scale_shift_table",
+            &[2, 128],
+            tch::nn::init::Init::Const(0.0),
+        );
         let conv_out = make_conv_nd(vs / "conv_out", 3, 128, 48, 3, 1, 1, causal, "zeros");
 
         // Per-channel latent normalization (denormalize before decoding)
-        let pc_mean = vs.var("per_channel_statistics/mean_of_means", &[128], tch::nn::init::Init::Const(0.0));
-        let pc_std = vs.var("per_channel_statistics/std_of_means", &[128], tch::nn::init::Init::Const(1.0));
+        let pc_mean = vs.var(
+            "per_channel_statistics/mean_of_means",
+            &[128],
+            tch::nn::init::Init::Const(0.0),
+        );
+        let pc_std = vs.var(
+            "per_channel_statistics/std_of_means",
+            &[128],
+            tch::nn::init::Init::Const(1.0),
+        );
 
         Self {
             conv_in,
@@ -455,7 +523,11 @@ impl VideoVAE {
         decoder: VideoDecoder,
         spatial_downsample_factor: i64,
     ) -> Self {
-        Self { encoder, decoder, spatial_downsample_factor }
+        Self {
+            encoder,
+            decoder,
+            spatial_downsample_factor,
+        }
     }
 
     pub fn encode(&self, x: &Tensor) -> Tensor {

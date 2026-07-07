@@ -12,10 +12,7 @@ use tch::Tensor;
 pub const DEFAULT_GROUP_SIZE: i64 = 128;
 
 /// Quantize weights to INT4 with per-group scaling.
-pub fn quantize_weight_to_int4_per_group(
-    weight: &Tensor,
-    group_size: i64,
-) -> (Tensor, Tensor) {
+pub fn quantize_weight_to_int4_per_group(weight: &Tensor, group_size: i64) -> (Tensor, Tensor) {
     let w = weight.to_kind(tch::Kind::Float);
     let shape = w.size();
     let out_features = shape[0];
@@ -25,7 +22,10 @@ pub fn quantize_weight_to_int4_per_group(
     let num_groups = padded_in / group_size;
 
     let w_padded = if padded_in > in_features {
-        let padding = Tensor::zeros([out_features, padded_in - in_features], (tch::Kind::Float, w.device()));
+        let padding = Tensor::zeros(
+            [out_features, padded_in - in_features],
+            (tch::Kind::Float, w.device()),
+        );
         Tensor::cat(&[&w, &padding], 1)
     } else {
         w
@@ -36,7 +36,10 @@ pub fn quantize_weight_to_int4_per_group(
     let scales = (abs_max / 7.0).clamp(1e-8, f32::MAX as f64).squeeze_dim(2);
 
     let w_normalized = &w_groups / &scales.unsqueeze(2);
-    let w_int4 = w_normalized.clamp(-7.0, 7.0).round().to_kind(tch::Kind::Int8);
+    let w_int4 = w_normalized
+        .clamp(-7.0, 7.0)
+        .round()
+        .to_kind(tch::Kind::Int8);
 
     // Pack pairs of INT4 values into bytes
     let w_packed = w_int4.reshape([out_features, num_groups, group_size / 2, 2]);
@@ -48,7 +51,8 @@ pub fn quantize_weight_to_int4_per_group(
     let masked_high = high.bitwise_and(0x0F);
     let shift_amt = Tensor::from_slice(&[4i64]).to_kind(tch::Kind::Int8);
     let shifted_high = masked_high.bitwise_left_shift(&shift_amt);
-    let packed = masked_low.bitwise_or_tensor(&shifted_high)
+    let packed = masked_low
+        .bitwise_or_tensor(&shifted_high)
         .reshape([out_features, num_groups * group_size / 2]);
 
     (packed.to_kind(tch::Kind::Int8), scales)
@@ -70,15 +74,26 @@ impl INT4Linear {
         let out_features = weight.size()[0];
         let in_features = weight.size()[1];
         let (packed_weight, scales) = quantize_weight_to_int4_per_group(&weight, group_size);
-        Self { packed_weight, scales, bias, in_features, out_features, group_size }
+        Self {
+            packed_weight,
+            scales,
+            bias,
+            in_features,
+            out_features,
+            group_size,
+        }
     }
 
     pub fn new_default(weight: Tensor, bias: Option<Tensor>) -> Self {
         Self::new(weight, bias, DEFAULT_GROUP_SIZE)
     }
 
-    pub fn in_features(&self) -> i64 { self.in_features }
-    pub fn out_features(&self) -> i64 { self.out_features }
+    pub fn in_features(&self) -> i64 {
+        self.in_features
+    }
+    pub fn out_features(&self) -> i64 {
+        self.out_features
+    }
 
     pub fn memory_bytes(&self) -> usize {
         let weight_bytes = (self.out_features * self.in_features / 2) as usize;
@@ -94,16 +109,25 @@ impl Module for INT4Linear {
         let group_size = self.group_size;
 
         // Unpack INT4: extract low and high nibbles
-        let low = self.packed_weight.bitwise_and(0x0F).to_kind(tch::Kind::Float);
+        let low = self
+            .packed_weight
+            .bitwise_and(0x0F)
+            .to_kind(tch::Kind::Float);
         let shift_amt = Tensor::from_slice(&[4i64]).to_kind(tch::Kind::Int8);
-        let high = self.packed_weight.bitwise_right_shift(&shift_amt).bitwise_and(0x0F).to_kind(tch::Kind::Float);
+        let high = self
+            .packed_weight
+            .bitwise_right_shift(&shift_amt)
+            .bitwise_and(0x0F)
+            .to_kind(tch::Kind::Float);
 
         // Interleave low and high nibbles back to full width
-        let unpacked = Tensor::stack(&[&low, &high], 2)
-            .reshape([self.out_features, self.in_features]);
+        let unpacked =
+            Tensor::stack(&[&low, &high], 2).reshape([self.out_features, self.in_features]);
 
         // Dequantize
-        let scales_expanded = self.scales.unsqueeze(2)
+        let scales_expanded = self
+            .scales
+            .unsqueeze(2)
             .expand([self.out_features, num_groups, group_size], true)
             .reshape([self.out_features, self.in_features]);
         let w_f32 = unpacked * scales_expanded;
@@ -130,7 +154,10 @@ mod tests {
 
         let fp32_bytes = 256 * 512 * 4;
         let int4_bytes = 256 * 256 + 256 * 4 * 4;
-        assert!(int4_bytes < fp32_bytes / 4, "INT4 should use <25% of FP32 memory");
+        assert!(
+            int4_bytes < fp32_bytes / 4,
+            "INT4 should use <25% of FP32 memory"
+        );
     }
 
     #[test]

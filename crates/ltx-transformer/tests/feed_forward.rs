@@ -43,7 +43,10 @@ fn test_feed_forward_output_finite() {
     let ff = FeedForward::new(&vs.root(), 64);
     let x = Tensor::randn([2, 8, 64], (Kind::Float, Device::Cpu));
     let out = ff.forward(&x);
-    assert!(out.isfinite().all().double_value(&[]) > 0.0, "FeedForward produced NaN/Inf");
+    assert!(
+        out.isfinite().all().double_value(&[]) > 0.0,
+        "FeedForward produced NaN/Inf"
+    );
 }
 
 /// FeedForward with all-zero input should not produce NaN.
@@ -53,7 +56,11 @@ fn test_feed_forward_zero_input() {
     let ff = FeedForward::new(&vs.root(), 64);
     let x = Tensor::zeros([1, 4, 64], (Kind::Float, Device::Cpu));
     let out = ff.forward(&x);
-    assert_eq!(out.isnan().any().double_value(&[]), 0.0, "FeedForward NaN on zero input");
+    assert_eq!(
+        out.isnan().any().double_value(&[]),
+        0.0,
+        "FeedForward NaN on zero input"
+    );
 }
 
 /// FeedForward with extreme values should not overflow.
@@ -67,5 +74,8 @@ fn test_feed_forward_extreme_values() {
     let _ = x.narrow(2, 0, 1).fill_(100.0);
     let _ = x.narrow(2, 1, 1).fill_(-100.0);
     let out = ff.forward(&x);
-    assert!(out.isfinite().all().double_value(&[]) > 0.0, "FeedForward overflow on extreme values");
+    assert!(
+        out.isfinite().all().double_value(&[]) > 0.0,
+        "FeedForward overflow on extreme values"
+    );
 }

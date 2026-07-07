@@ -91,8 +91,14 @@ fn test_full_video_inference() {
 
     // Verify output
     assert_eq!(x.size(), vec![b, c, f, h, w]);
-    assert!(x.isfinite().all().double_value(&[]) > 0.0, "Output contains NaN/Inf");
-    assert!(x.abs().max().double_value(&[]) < 100.0, "Output has extreme values");
+    assert!(
+        x.isfinite().all().double_value(&[]) > 0.0,
+        "Output contains NaN/Inf"
+    );
+    assert!(
+        x.abs().max().double_value(&[]) < 100.0,
+        "Output has extreme values"
+    );
 }
 
 /// Full audio diffusion inference: noisy latent → denoised output.
@@ -144,7 +150,10 @@ fn test_full_audio_inference() {
 
     // Verify output
     assert_eq!(x.size(), vec![b, c, t, f]);
-    assert!(x.isfinite().all().double_value(&[]) > 0.0, "Output contains NaN/Inf");
+    assert!(
+        x.isfinite().all().double_value(&[]) > 0.0,
+        "Output contains NaN/Inf"
+    );
 }
 
 /// Inference with multiple CFG scales to verify guidance works correctly.
@@ -181,8 +190,10 @@ fn test_inference_various_cfg_scales() {
             x = step.step(&x, sigma, next_sigma, &denoised, Kind::Float);
         }
 
-        assert!(x.isfinite().all().double_value(&[]) > 0.0,
-            "CFG scale {cfg_scale}: output contains NaN/Inf");
+        assert!(
+            x.isfinite().all().double_value(&[]) > 0.0,
+            "CFG scale {cfg_scale}: output contains NaN/Inf"
+        );
     }
 }
 
@@ -215,7 +226,10 @@ fn test_inference_res2s_step() {
         x = step.step(&x, sigma, next_sigma, &denoised, Kind::Float);
     }
 
-    assert!(x.isfinite().all().double_value(&[]) > 0.0, "Res2s output contains NaN/Inf");
+    assert!(
+        x.isfinite().all().double_value(&[]) > 0.0,
+        "Res2s output contains NaN/Inf"
+    );
 }
 
 /// Inference with deeper transformer (4 layers).
@@ -260,7 +274,10 @@ fn test_inference_deep_transformer() {
         x = step.step(&x, sigma, next_sigma, &denoised, Kind::Float);
     }
 
-    assert!(x.isfinite().all().double_value(&[]) > 0.0, "Deep transformer output contains NaN/Inf");
+    assert!(
+        x.isfinite().all().double_value(&[]) > 0.0,
+        "Deep transformer output contains NaN/Inf"
+    );
 }
 
 /// Inference with batch > 1.
@@ -291,5 +308,8 @@ fn test_inference_batch() {
     }
 
     assert_eq!(x.size(), vec![b, c, f, h, w]);
-    assert!(x.isfinite().all().double_value(&[]) > 0.0, "Batch output contains NaN/Inf");
+    assert!(
+        x.isfinite().all().double_value(&[]) > 0.0,
+        "Batch output contains NaN/Inf"
+    );
 }

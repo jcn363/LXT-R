@@ -21,7 +21,12 @@ impl AdaLayerNormSingle {
     pub fn new_with_input_dim(vs: &tch::nn::Path, hidden_dim: i64, sinusoidal_dim: i64) -> Self {
         Self {
             emb: CombinedTimestepSizeEmbeddings::new_with_input_dim(vs, hidden_dim, sinusoidal_dim),
-            linear: tch::nn::linear(vs / "linear", hidden_dim, hidden_dim * 6, Default::default()),
+            linear: tch::nn::linear(
+                vs / "linear",
+                hidden_dim,
+                hidden_dim * 6,
+                Default::default(),
+            ),
         }
     }
 

@@ -1,3 +1,4 @@
+use ltx_types::NormLayerType;
 /// End-to-end tests for the Video VAE encoder/decoder.
 ///
 /// Strategy: use tiny tensors to avoid OOM on CPU. Tests that need checkpoint
@@ -7,9 +8,8 @@
 /// The checkpoint-loading tests are serialized (`#[serial]`) because each one
 /// loads a ~5.7 GB safetensors file into a VarStore. Running them in parallel
 /// exhausts system RAM on machines with ≤32 GB.
-use ltx_video_vae::configurator::{build_encoder, build_decoder};
+use ltx_video_vae::configurator::{build_decoder, build_encoder};
 use ltx_video_vae::load_vae_weights;
-use ltx_types::NormLayerType;
 use serial_test::serial;
 
 fn weights_path(name: &str) -> String {
@@ -30,7 +30,10 @@ fn test_encoder_weight_loading() {
     let _encoder = build_encoder(&(vs.root() / "encoder"), NormLayerType::Group, 32, false);
     let loaded = load_vae_weights(&vs, &weights_path(CKPT), "vae.");
     let total = vs.variables().len();
-    assert_eq!(loaded as usize, total, "all encoder variables should match checkpoint");
+    assert_eq!(
+        loaded as usize, total,
+        "all encoder variables should match checkpoint"
+    );
 }
 
 #[test]
@@ -94,7 +97,10 @@ fn test_decoder_weight_loading() {
     let _decoder = build_decoder(&(vs.root() / "decoder"), NormLayerType::Group, 32, false);
     let loaded = load_vae_weights(&vs, &weights_path(CKPT), "vae.");
     let total = vs.variables().len();
-    assert_eq!(loaded as usize, total, "all decoder variables should match checkpoint");
+    assert_eq!(
+        loaded as usize, total,
+        "all decoder variables should match checkpoint"
+    );
 }
 
 // ---------------------------------------------------------------------------

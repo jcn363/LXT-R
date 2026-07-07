@@ -102,11 +102,7 @@ impl AudioEncoder {
             };
             let out_ch = config.encoder_channels[i];
 
-            let resblock = ResnetBlock2D::new(
-                vs / format!("down_{i}") / "resblock",
-                in_ch,
-                out_ch,
-            );
+            let resblock = ResnetBlock2D::new(vs / format!("down_{i}") / "resblock", in_ch, out_ch);
 
             let conv = if i < num_stages - 1 {
                 Some(CausalConv2d::new_with_axes(
@@ -233,11 +229,7 @@ impl AudioDecoder {
                 1, // stride_freq
             ));
 
-            let resblock = ResnetBlock2D::new(
-                vs / format!("up_{i}") / "resblock",
-                out_ch,
-                out_ch,
-            );
+            let resblock = ResnetBlock2D::new(vs / format!("up_{i}") / "resblock", out_ch, out_ch);
 
             upsample_stages.push(UpsampleStage { conv, resblock });
         }

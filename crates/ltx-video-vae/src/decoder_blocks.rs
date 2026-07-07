@@ -41,9 +41,29 @@ impl DecoderResBlock {
         inject_noise: bool,
     ) -> Self {
         let norm1 = build_norm_layer(norm_type, channels, norm_groups);
-        let conv1 = make_conv_nd(vs / "conv1", 3, channels, channels, 3, 1, 1, causal, "zeros");
+        let conv1 = make_conv_nd(
+            vs / "conv1",
+            3,
+            channels,
+            channels,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
         let norm2 = build_norm_layer(norm_type, channels, norm_groups);
-        let conv2 = make_conv_nd(vs / "conv2", 3, channels, channels, 3, 1, 1, causal, "zeros");
+        let conv2 = make_conv_nd(
+            vs / "conv2",
+            3,
+            channels,
+            channels,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
 
         let per_channel_scale1 = if inject_noise {
             Some(vs.var(
@@ -64,7 +84,14 @@ impl DecoderResBlock {
             None
         };
 
-        Self { norm1, conv1, norm2, conv2, per_channel_scale1, per_channel_scale2 }
+        Self {
+            norm1,
+            conv1,
+            norm2,
+            conv2,
+            per_channel_scale1,
+            per_channel_scale2,
+        }
     }
 
     /// Forward with pre-computed modulation tensor.
@@ -89,10 +116,7 @@ impl DecoderResBlock {
         // Optional noise injection (StyleGAN-style)
         let h = if let Some(ref pcs) = self.per_channel_scale1 {
             let h_shape = h.size();
-            let noise = Tensor::randn(
-                [h_shape[3], h_shape[4]],
-                (h.kind(), h.device()),
-            );
+            let noise = Tensor::randn([h_shape[3], h_shape[4]], (h.kind(), h.device()));
             // pcs: [C, 1, 1], noise: [H, W] → broadcast to [C, H, W] → [1, C, 1, H, W]
             let scaled_noise = (noise * pcs).unsqueeze(0).unsqueeze(2);
             h + scaled_noise
@@ -107,10 +131,7 @@ impl DecoderResBlock {
 
         let h2 = if let Some(ref pcs) = self.per_channel_scale2 {
             let h2_shape = h2.size();
-            let noise = Tensor::randn(
-                [h2_shape[3], h2_shape[4]],
-                (h2.kind(), h2.device()),
-            );
+            let noise = Tensor::randn([h2_shape[3], h2_shape[4]], (h2.kind(), h2.device()));
             let scaled_noise = (noise * pcs).unsqueeze(0).unsqueeze(2);
             h2 + scaled_noise
         } else {
@@ -147,16 +168,20 @@ impl CompressAllUpsample {
     /// `in_channels`: input feature channels
     /// `multiplier`: channel reduction factor (2 for LTX-Video)
     /// `residual`: whether to add a skip connection
-    pub fn new(
-        vs: &Path,
-        in_channels: i64,
-        multiplier: i64,
-        causal: bool,
-        residual: bool,
-    ) -> Self {
+    pub fn new(vs: &Path, in_channels: i64, multiplier: i64, causal: bool, residual: bool) -> Self {
         // Conv output: prod(stride) * in_ch / multiplier = 8 * in_ch / multiplier
         let conv_out = 8 * in_channels / multiplier;
-        let conv = make_conv_nd(vs / "conv", 3, in_channels, conv_out, 3, 1, 1, causal, "zeros");
+        let conv = make_conv_nd(
+            vs / "conv",
+            3,
+            in_channels,
+            conv_out,
+            3,
+            1,
+            1,
+            causal,
+            "zeros",
+        );
         Self { conv, residual }
     }
 
@@ -172,7 +197,8 @@ impl CompressAllUpsample {
             let (b, c, t, h, w) = x.size5().expect("CompressAllUpsample input must be 5D");
             // Unpack: treat C as (C/8)*2*2*2, rearrange to [B, C/8, 2T, 2H, 2W]
             let c_inner = c / 8;
-            let x_in = x.reshape([b, c_inner, 2, 2, 2, t, h, w])
+            let x_in = x
+                .reshape([b, c_inner, 2, 2, 2, t, h, w])
                 .permute([0, 1, 5, 2, 6, 3, 7, 4])
                 .reshape([b, c_inner, t * 2, h * 2, w * 2]);
             // Repeat 4 times along channel dim: C/8 * 4 = C/2
@@ -206,8 +232,18 @@ pub struct TimestepEmbedding {
 
 impl TimestepEmbedding {
     pub fn new(vs: &Path, input_dim: i64, output_dim: i64) -> Self {
-        let linear_1 = tch::nn::linear(vs / "timestep_embedder" / "linear_1", input_dim, output_dim, Default::default());
-        let linear_2 = tch::nn::linear(vs / "timestep_embedder" / "linear_2", output_dim, output_dim, Default::default());
+        let linear_1 = tch::nn::linear(
+            vs / "timestep_embedder" / "linear_1",
+            input_dim,
+            output_dim,
+            Default::default(),
+        );
+        let linear_2 = tch::nn::linear(
+            vs / "timestep_embedder" / "linear_2",
+            output_dim,
+            output_dim,
+            Default::default(),
+        );
         Self { linear_1, linear_2 }
     }
 

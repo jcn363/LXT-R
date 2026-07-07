@@ -1,7 +1,7 @@
-/// Full encode-decode roundtrip with a synthetic RGB image.
-use ltx_video_vae::configurator::{build_encoder, build_decoder};
-use ltx_video_vae::load_vae_weights;
 use ltx_types::NormLayerType;
+/// Full encode-decode roundtrip with a synthetic RGB image.
+use ltx_video_vae::configurator::{build_decoder, build_encoder};
+use ltx_video_vae::load_vae_weights;
 use serial_test::serial;
 
 fn weights_path(name: &str) -> String {
@@ -33,13 +33,19 @@ fn test_encode_decode_roundtrip_with_image() {
 
     let input_min = input.min().double_value(&[]);
     let input_max = input.max().double_value(&[]);
-    eprintln!("input: {:?} range=[{input_min:.3}, {input_max:.3}]", input.size());
+    eprintln!(
+        "input: {:?} range=[{input_min:.3}, {input_max:.3}]",
+        input.size()
+    );
 
     // Encode
     let latent = encoder.encode_mean(&input);
     let lat_min = latent.min().double_value(&[]);
     let lat_max = latent.max().double_value(&[]);
-    eprintln!("latent: {:?} range=[{lat_min:.3}, {lat_max:.3}]", latent.size());
+    eprintln!(
+        "latent: {:?} range=[{lat_min:.3}, {lat_max:.3}]",
+        latent.size()
+    );
     assert_eq!(latent.size(), vec![1, 128, 1, 8, 8]);
 
     // Decode with timestep=0.05 (default decode timestep)
@@ -47,7 +53,10 @@ fn test_encode_decode_roundtrip_with_image() {
     let output = decoder.forward(&latent, &timestep);
     let out_min = output.min().double_value(&[]);
     let out_max = output.max().double_value(&[]);
-    eprintln!("output: {:?} range=[{out_min:.3}, {out_max:.3}]", output.size());
+    eprintln!(
+        "output: {:?} range=[{out_min:.3}, {out_max:.3}]",
+        output.size()
+    );
     assert_eq!(output.size()[0], 1);
     assert_eq!(output.size()[1], 3);
 
@@ -60,8 +69,16 @@ fn test_encode_decode_roundtrip_with_image() {
     // Check non-trivial output
     let output_std = output.std(false).double_value(&[]);
     eprintln!("output std: {output_std:.6}");
-    assert!(output_std > 0.001, "output is nearly constant (std={output_std})");
+    assert!(
+        output_std > 0.001,
+        "output is nearly constant (std={output_std})"
+    );
 
-    eprintln!("✓ roundtrip: {:?} → {:?} → {:?}", input.size(), latent.size(), output.size());
+    eprintln!(
+        "✓ roundtrip: {:?} → {:?} → {:?}",
+        input.size(),
+        latent.size(),
+        output.size()
+    );
     drop(no_grad);
 }

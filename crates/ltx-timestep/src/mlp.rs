@@ -26,18 +26,8 @@ impl TimestepEmbedding {
 
     /// Create with separate input dimension (for sinusoidal embedding input).
     pub fn new_with_input_dim(vs: &tch::nn::Path, input_dim: i64, output_dim: i64) -> Self {
-        let linear_1 = tch::nn::linear(
-            vs / "linear_1",
-            input_dim,
-            output_dim,
-            Default::default(),
-        );
-        let linear_2 = tch::nn::linear(
-            vs / "linear_2",
-            output_dim,
-            output_dim,
-            Default::default(),
-        );
+        let linear_1 = tch::nn::linear(vs / "linear_1", input_dim, output_dim, Default::default());
+        let linear_2 = tch::nn::linear(vs / "linear_2", output_dim, output_dim, Default::default());
         Self { linear_1, linear_2 }
     }
 

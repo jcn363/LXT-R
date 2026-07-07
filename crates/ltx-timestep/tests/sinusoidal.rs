@@ -55,7 +55,10 @@ fn test_get_timestep_embedding_varies() {
     let t0 = get_timestep_embedding(&Tensor::from_slice(&[0i64]), 32, 10_000);
     let t1 = get_timestep_embedding(&Tensor::from_slice(&[1i64]), 32, 10_000);
     let max_diff = (&t0 - &t1).abs().max().double_value(&[]);
-    assert!(max_diff > 0.0, "timesteps 0 and 1 produced identical embeddings");
+    assert!(
+        max_diff > 0.0,
+        "timesteps 0 and 1 produced identical embeddings"
+    );
 }
 
 // ── Golden tests (Python reference) ──────────────────────────────────────
@@ -63,8 +66,10 @@ fn test_get_timestep_embedding_varies() {
 /// Golden test: sinusoidal embedding for single timestep matches Python.
 #[test]
 fn test_golden_sinusoidal_single() {
-    let input = ltx_test_utils::load_golden("crates/goldens/sinusoidal_single.safetensors", "input");
-    let expected = ltx_test_utils::load_golden("crates/goldens/sinusoidal_single.safetensors", "output");
+    let input =
+        ltx_test_utils::load_golden("crates/goldens/sinusoidal_single.safetensors", "input");
+    let expected =
+        ltx_test_utils::load_golden("crates/goldens/sinusoidal_single.safetensors", "output");
 
     let dim = expected.size()[1];
     let actual = get_timestep_embedding(&input, dim, 10_000);
@@ -75,7 +80,8 @@ fn test_golden_sinusoidal_single() {
 #[test]
 fn test_golden_sinusoidal_batch() {
     let input = ltx_test_utils::load_golden("crates/goldens/sinusoidal_batch.safetensors", "input");
-    let expected = ltx_test_utils::load_golden("crates/goldens/sinusoidal_batch.safetensors", "output");
+    let expected =
+        ltx_test_utils::load_golden("crates/goldens/sinusoidal_batch.safetensors", "output");
 
     let dim = expected.size()[1];
     let actual = get_timestep_embedding(&input, dim, 10_000);

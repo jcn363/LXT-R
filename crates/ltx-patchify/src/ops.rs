@@ -122,9 +122,16 @@ mod tests {
     #[test]
     fn test_golden_patchify_5d() {
         let input = ltx_test_utils::load_golden("crates/goldens/patchify_5d.safetensors", "input");
-        let expected_recovered = ltx_test_utils::load_golden("crates/goldens/patchify_5d.safetensors", "recovered");
+        let expected_recovered =
+            ltx_test_utils::load_golden("crates/goldens/patchify_5d.safetensors", "recovered");
 
-        let (b, c, f, h, w) = (input.size()[0], input.size()[1], input.size()[2], input.size()[3], input.size()[4]);
+        let (b, c, f, h, w) = (
+            input.size()[0],
+            input.size()[1],
+            input.size()[2],
+            input.size()[3],
+            input.size()[4],
+        );
         let (p1, p2, p3) = (2i64, 4i64, 4i64);
         let patched = patchify_5d(&input, p1, p2, p3);
         let recovered = unpatchify_5d(&patched, b, c, f, h, w, p1, p2, p3);
@@ -136,7 +143,8 @@ mod tests {
     #[test]
     fn test_golden_patchify_4d() {
         let input = ltx_test_utils::load_golden("crates/goldens/patchify_4d.safetensors", "input");
-        let expected_patched = ltx_test_utils::load_golden("crates/goldens/patchify_4d.safetensors", "patched");
+        let expected_patched =
+            ltx_test_utils::load_golden("crates/goldens/patchify_4d.safetensors", "patched");
 
         let p = 8i64;
         let patched = patchify_4d(&input, p);

@@ -16,7 +16,10 @@ pub fn quantize_to_int8_per_tensor(weight: &Tensor) -> (Tensor, Tensor) {
     let w = weight.to_kind(tch::Kind::Float);
     let abs_max = w.abs().amax(0, false); // scalar
     let scale = (&abs_max / 127.0).clamp(1e-8, f32::MAX as f64);
-    let w_q = (&w / &scale).clamp(-128.0, 127.0).round().to_kind(tch::Kind::Int8);
+    let w_q = (&w / &scale)
+        .clamp(-128.0, 127.0)
+        .round()
+        .to_kind(tch::Kind::Int8);
     (w_q, scale)
 }
 

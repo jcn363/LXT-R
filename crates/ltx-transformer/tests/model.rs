@@ -79,8 +79,15 @@ fn test_model_output_finite() {
     let timestep = Tensor::from_slice(&[0.5]);
     let context = Tensor::randn([1, 3, 64], (Kind::Float, Device::Cpu));
     let out = model.forward(&latent, &timestep, &context, None, None);
-    assert_eq!(out.isnan().any().double_value(&[]), 0.0, "Model produced NaN");
-    assert!(out.isfinite().all().double_value(&[]) > 0.0, "Model produced Inf");
+    assert_eq!(
+        out.isnan().any().double_value(&[]),
+        0.0,
+        "Model produced NaN"
+    );
+    assert!(
+        out.isfinite().all().double_value(&[]) > 0.0,
+        "Model produced Inf"
+    );
 }
 
 /// Model with zero input should not produce NaN.
@@ -92,7 +99,11 @@ fn test_model_zero_input() {
     let timestep = Tensor::from_slice(&[0.0]);
     let context = Tensor::zeros([1, 3, 64], (Kind::Float, Device::Cpu));
     let out = model.forward(&latent, &timestep, &context, None, None);
-    assert_eq!(out.isnan().any().double_value(&[]), 0.0, "Model NaN on zero input");
+    assert_eq!(
+        out.isnan().any().double_value(&[]),
+        0.0,
+        "Model NaN on zero input"
+    );
 }
 
 /// Model with extreme timestep should not overflow.
@@ -104,5 +115,8 @@ fn test_model_extreme_timestep() {
     let timestep = Tensor::from_slice(&[1000.0]);
     let context = Tensor::randn([1, 3, 64], (Kind::Float, Device::Cpu));
     let out = model.forward(&latent, &timestep, &context, None, None);
-    assert!(out.isfinite().all().double_value(&[]) > 0.0, "Model overflow on extreme timestep");
+    assert!(
+        out.isfinite().all().double_value(&[]) > 0.0,
+        "Model overflow on extreme timestep"
+    );
 }

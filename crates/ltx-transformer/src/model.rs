@@ -20,7 +20,11 @@ pub struct LTXModel {
 
 impl LTXModel {
     pub fn new(blocks: Vec<BasicAVTransformerBlock>, norm_out: RMSNorm, proj_out: Linear) -> Self {
-        Self { blocks, norm_out, proj_out }
+        Self {
+            blocks,
+            norm_out,
+            proj_out,
+        }
     }
 
     /// Video-only forward pass.

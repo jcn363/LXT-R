@@ -28,7 +28,9 @@ impl T5LayerNorm {
     fn forward(&self, x: &Tensor) -> Tensor {
         let x_f32 = x.to_kind(tch::Kind::Float);
         let mean = x_f32.mean_dim(-1i64, true, tch::Kind::Float);
-        let var = (&x_f32 - &mean).pow_tensor_scalar(2).mean_dim(-1i64, true, tch::Kind::Float);
+        let var = (&x_f32 - &mean)
+            .pow_tensor_scalar(2)
+            .mean_dim(-1i64, true, tch::Kind::Float);
         let norm = (&x_f32 - &mean) / (var + self.eps).sqrt();
         (norm * &self.weight).to_kind(x.kind())
     }
@@ -45,7 +47,8 @@ struct T5RelativePositionBias {
 impl T5RelativePositionBias {
     fn forward(&self, query_len: i64, key_len: i64, device: tch::Device) -> Tensor {
         let half = self.num_buckets / 2;
-        let ctx_pos = Tensor::arange_start(0i64, query_len, (tch::Kind::Int64, device)).unsqueeze(1);
+        let ctx_pos =
+            Tensor::arange_start(0i64, query_len, (tch::Kind::Int64, device)).unsqueeze(1);
         let mem_pos = Tensor::arange_start(0i64, key_len, (tch::Kind::Int64, device)).unsqueeze(0);
         let relative = &mem_pos - &ctx_pos;
 
@@ -53,14 +56,17 @@ impl T5RelativePositionBias {
         let abs_rel = relative.abs().to_kind(tch::Kind::Float);
         let log_ratio = (self.max_distance as f64).ln() / (half as f64).ln();
         let neg_bucket = (half as f64 - abs_rel.log() / log_ratio)
-            .to_kind(tch::Kind::Int64).clamp(0, half - 1);
+            .to_kind(tch::Kind::Int64)
+            .clamp(0, half - 1);
         let pos_bucket = (half as f64 + &abs_rel / self.max_distance as f64 * (half as f64 - 1.0))
-            .to_kind(tch::Kind::Int64).clamp(half, self.num_buckets - 1);
+            .to_kind(tch::Kind::Int64)
+            .clamp(half, self.num_buckets - 1);
         let buckets = pos_bucket.where_self(&is_pos, &neg_bucket);
 
         let bias = self.weight.index_select(0, &buckets.flatten(0, -1));
         bias.reshape([query_len, key_len, self.num_heads])
-            .permute([2, 0, 1]).unsqueeze(0)
+            .permute([2, 0, 1])
+            .unsqueeze(0)
     }
 }
 
@@ -80,9 +86,21 @@ impl T5Attention {
         let b = x.size()[0];
         let seq_len = x.size()[1];
 
-        let q = self.q.forward_t(x, false).reshape([b, seq_len, self.num_heads, self.head_dim]).transpose(1, 2);
-        let k = self.k.forward_t(x, false).reshape([b, seq_len, self.num_heads, self.head_dim]).transpose(1, 2);
-        let v = self.v.forward_t(x, false).reshape([b, seq_len, self.num_heads, self.head_dim]).transpose(1, 2);
+        let q = self
+            .q
+            .forward_t(x, false)
+            .reshape([b, seq_len, self.num_heads, self.head_dim])
+            .transpose(1, 2);
+        let k = self
+            .k
+            .forward_t(x, false)
+            .reshape([b, seq_len, self.num_heads, self.head_dim])
+            .transpose(1, 2);
+        let v = self
+            .v
+            .forward_t(x, false)
+            .reshape([b, seq_len, self.num_heads, self.head_dim])
+            .transpose(1, 2);
 
         let scale = (self.head_dim as f64).powf(-0.5);
         let scores = q.matmul(&k.transpose(-2, -1)) * scale + position_bias;
@@ -145,7 +163,12 @@ impl T5EncoderModel {
         let embed_tokens = load_tensor(st, "shared.weight", &[config.vocab_size, dm], device);
 
         let rel_bias = T5RelativePositionBias {
-            weight: load_tensor(st, "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight", &[32, nh], device),
+            weight: load_tensor(
+                st,
+                "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+                &[32, nh],
+                device,
+            ),
             num_buckets: 32,
             max_distance: 128,
             num_heads: nh,
@@ -155,22 +178,96 @@ impl T5EncoderModel {
         for i in 0..config.num_layers {
             let p = format!("encoder.block.{i}");
             blocks.push(T5Block {
-                ln_0: T5LayerNorm { weight: load_tensor(st, &format!("{p}.layer.0.layer_norm.weight"), &[dm], device), eps },
+                ln_0: T5LayerNorm {
+                    weight: load_tensor(
+                        st,
+                        &format!("{p}.layer.0.layer_norm.weight"),
+                        &[dm],
+                        device,
+                    ),
+                    eps,
+                },
                 attn: {
                     let inner = nh * dv;
                     T5Attention {
-                        q: Linear { ws: load_tensor(st, &format!("{p}.layer.0.SelfAttention.q.weight"), &[dm, inner], device), bs: None },
-                        k: Linear { ws: load_tensor(st, &format!("{p}.layer.0.SelfAttention.k.weight"), &[dm, inner], device), bs: None },
-                        v: Linear { ws: load_tensor(st, &format!("{p}.layer.0.SelfAttention.v.weight"), &[dm, inner], device), bs: None },
-                        o: Linear { ws: load_tensor(st, &format!("{p}.layer.0.SelfAttention.o.weight"), &[inner, dm], device), bs: None },
-                        num_heads: nh, head_dim: dv, inner_dim: inner,
+                        q: Linear {
+                            ws: load_tensor(
+                                st,
+                                &format!("{p}.layer.0.SelfAttention.q.weight"),
+                                &[dm, inner],
+                                device,
+                            ),
+                            bs: None,
+                        },
+                        k: Linear {
+                            ws: load_tensor(
+                                st,
+                                &format!("{p}.layer.0.SelfAttention.k.weight"),
+                                &[dm, inner],
+                                device,
+                            ),
+                            bs: None,
+                        },
+                        v: Linear {
+                            ws: load_tensor(
+                                st,
+                                &format!("{p}.layer.0.SelfAttention.v.weight"),
+                                &[dm, inner],
+                                device,
+                            ),
+                            bs: None,
+                        },
+                        o: Linear {
+                            ws: load_tensor(
+                                st,
+                                &format!("{p}.layer.0.SelfAttention.o.weight"),
+                                &[inner, dm],
+                                device,
+                            ),
+                            bs: None,
+                        },
+                        num_heads: nh,
+                        head_dim: dv,
+                        inner_dim: inner,
                     }
                 },
-                ln_1: T5LayerNorm { weight: load_tensor(st, &format!("{p}.layer.1.layer_norm.weight"), &[dm], device), eps },
+                ln_1: T5LayerNorm {
+                    weight: load_tensor(
+                        st,
+                        &format!("{p}.layer.1.layer_norm.weight"),
+                        &[dm],
+                        device,
+                    ),
+                    eps,
+                },
                 ffn: T5DenseGatedGELU {
-                    wi_0: Linear { ws: load_tensor(st, &format!("{p}.layer.1.DenseReluDense.wi_0.weight"), &[df, dm], device), bs: None },
-                    wi_1: Linear { ws: load_tensor(st, &format!("{p}.layer.1.DenseReluDense.wi_1.weight"), &[df, dm], device), bs: None },
-                    wo: Linear { ws: load_tensor(st, &format!("{p}.layer.1.DenseReluDense.wo.weight"), &[dm, df], device), bs: None },
+                    wi_0: Linear {
+                        ws: load_tensor(
+                            st,
+                            &format!("{p}.layer.1.DenseReluDense.wi_0.weight"),
+                            &[df, dm],
+                            device,
+                        ),
+                        bs: None,
+                    },
+                    wi_1: Linear {
+                        ws: load_tensor(
+                            st,
+                            &format!("{p}.layer.1.DenseReluDense.wi_1.weight"),
+                            &[df, dm],
+                            device,
+                        ),
+                        bs: None,
+                    },
+                    wo: Linear {
+                        ws: load_tensor(
+                            st,
+                            &format!("{p}.layer.1.DenseReluDense.wo.weight"),
+                            &[dm, df],
+                            device,
+                        ),
+                        bs: None,
+                    },
                 },
             });
         }
@@ -180,14 +277,23 @@ impl T5EncoderModel {
             eps,
         };
 
-        Self { embed_tokens, blocks, rel_bias, final_ln, d_model: dm }
+        Self {
+            embed_tokens,
+            blocks,
+            rel_bias,
+            final_ln,
+            d_model: dm,
+        }
     }
 
     pub fn forward(&self, input_ids: &Tensor) -> Tensor {
         let ids = input_ids.to_kind(tch::Kind::Int64);
         let flat = ids.flatten(0, -1);
-        let mut h = self.embed_tokens.index_select(0, &flat)
-            .reshape([ids.size()[0], ids.size()[1], self.d_model]);
+        let mut h = self.embed_tokens.index_select(0, &flat).reshape([
+            ids.size()[0],
+            ids.size()[1],
+            self.d_model,
+        ]);
 
         let seq_len = h.size()[1];
         let pos_bias = self.rel_bias.forward(seq_len, seq_len, h.device());

@@ -1,6 +1,6 @@
 /// Integration tests for the video VAE encode/decode pipeline.
 /// Tests: pixel space → VideoEncoder → latent → space_to_depth/depth_to_space
-use ltx_video_vae::sampling::{space_to_depth, depth_to_space};
+use ltx_video_vae::sampling::{depth_to_space, space_to_depth};
 use tch::{Device, Kind, Tensor};
 
 /// Test space_to_depth → depth_to_space roundtrip (the core VAE sampling operation).
@@ -60,8 +60,7 @@ fn test_vae_sampling_various_channels() {
 #[test]
 fn test_vae_sampling_value_roundtrip() {
     let x = Tensor::from_slice(&[
-        1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0,
-        9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+        1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
     ])
     .reshape([1, 1, 1, 4, 4]);
 

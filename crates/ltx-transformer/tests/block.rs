@@ -105,6 +105,13 @@ fn test_block_output_finite_and_nonzero() {
     let out = block.forward(&x, &timestep, &context, None, None);
 
     assert_eq!(out.size(), vec![1, 4, dim]);
-    assert_eq!(out.isnan().any().double_value(&[]), 0.0, "block output contains NaN");
-    assert!(out.abs().sum(Kind::Float).double_value(&[]) > 0.0, "block output is all zeros");
+    assert_eq!(
+        out.isnan().any().double_value(&[]),
+        0.0,
+        "block output contains NaN"
+    );
+    assert!(
+        out.abs().sum(Kind::Float).double_value(&[]) > 0.0,
+        "block output is all zeros"
+    );
 }

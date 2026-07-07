@@ -56,11 +56,7 @@ pub fn build_upsampling_path<'a>(
             1,      // stride_freq (preserve freq dim)
         ));
 
-        let resblock = ResnetBlock2D::new(
-            vs / format!("resblock_{i}"),
-            out_ch,
-            out_ch,
-        );
+        let resblock = ResnetBlock2D::new(vs / format!("resblock_{i}"), out_ch, out_ch);
 
         stages.push(UpsampleStage { conv, resblock });
     }
@@ -94,10 +90,7 @@ mod tests {
         let vs = tch::nn::VarStore::new(tch::Device::Cpu);
         let root = vs.root();
         let channels = [256, 128, 64];
-        let stages = build_upsampling_path(
-            root / "up",
-            &channels,
-        );
+        let stages = build_upsampling_path(root / "up", &channels);
         assert_eq!(stages.len(), 3);
 
         let x = Tensor::randn([1, 256, 16, 128], (tch::Kind::Float, tch::Device::Cpu));

@@ -48,10 +48,14 @@ fn test_varstore_keys_structure() {
     assert!(!keys.is_empty(), "VarStore should have variables");
 
     // Verify expected key patterns exist
-    assert!(keys.iter().any(|k| k.contains("self_attn")),
-        "Missing self_attn keys in VarStore");
-    assert!(keys.iter().any(|k| k.contains("cross_attn")),
-        "Missing cross_attn keys in VarStore");
+    assert!(
+        keys.iter().any(|k| k.contains("self_attn")),
+        "Missing self_attn keys in VarStore"
+    );
+    assert!(
+        keys.iter().any(|k| k.contains("cross_attn")),
+        "Missing cross_attn keys in VarStore"
+    );
 }
 
 /// Test that model can be saved and loaded with correct shapes.
@@ -77,9 +81,16 @@ fn test_model_save_load_roundtrip() {
     assert_eq!(vars1.len(), vars2.len(), "different number of variables");
 
     for (key1, tensor1) in vars1.iter() {
-        let tensor2 = vars2.get(key1).unwrap_or_else(|| panic!("missing key: {key1}"));
-        assert_eq!(tensor1.size(), tensor2.size(),
-            "shape mismatch for {key1}: {:?} vs {:?}", tensor1.size(), tensor2.size());
+        let tensor2 = vars2
+            .get(key1)
+            .unwrap_or_else(|| panic!("missing key: {key1}"));
+        assert_eq!(
+            tensor1.size(),
+            tensor2.size(),
+            "shape mismatch for {key1}: {:?} vs {:?}",
+            tensor1.size(),
+            tensor2.size()
+        );
     }
 
     // Clean up
@@ -110,8 +121,10 @@ fn test_model_inference_after_load() {
     let out1 = model.forward(&x, &timestep, &context, None, None);
     let out2 = model2.forward(&x, &timestep, &context, None, None);
 
-    assert!(out1.allclose(&out2, 1e-6, 1e-6, false),
-        "outputs differ after save/load");
+    assert!(
+        out1.allclose(&out2, 1e-6, 1e-6, false),
+        "outputs differ after save/load"
+    );
 
     // Clean up
     let _ = std::fs::remove_file(save_path);

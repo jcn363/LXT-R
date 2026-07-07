@@ -48,7 +48,8 @@ use std::process;
 
 use clap::Parser;
 use ltx_attention::RopeType;
-use ltx_components::{EulerStep, Res2sStep, GaussianNoiser, Ltx2Scheduler, CFG, APG, STG};
+use ltx_audio_vae::{AudioDecoder, AudioVAEConfig};
+use ltx_components::{EulerStep, GaussianNoiser, Ltx2Scheduler, Res2sStep, APG, CFG, STG};
 use ltx_norm::RMSNorm;
 use ltx_patchify::{patchify_5d, unpatchify_5d};
 use ltx_text_encoder::configurator;
@@ -59,7 +60,6 @@ use ltx_transformer::model::LTXModel;
 use ltx_types::{Guider, NormLayerType, Scheduler, STABILITY_EPS};
 use ltx_video_vae::configurator::{build_decoder, default_encoder_block_descs};
 use ltx_video_vae::{load_vae_weights, VideoEncoder};
-use ltx_audio_vae::{AudioDecoder, AudioVAEConfig};
 use tch::nn::ModuleT;
 use tch::{Device, Kind, Tensor};
 
@@ -289,7 +289,9 @@ fn pick_mps() -> Device {
     if is_mps_available() {
         Device::Mps
     } else {
-        eprintln!("warning: MPS not available (requires macOS with Metal support), falling back to CPU");
+        eprintln!(
+            "warning: MPS not available (requires macOS with Metal support), falling back to CPU"
+        );
         Device::Cpu
     }
 }
@@ -375,15 +377,20 @@ fn tile_spatial(x: &Tensor, tile_size: i64, overlap: i64) -> Vec<Tile> {
             let y_begin = (y_end - tile_size).max(0);
             let x_begin = (x_end - tile_size).max(0);
 
-            let patch = x.narrow(3, y_begin, y_end - y_begin)
-                         .narrow(4, x_begin, x_end - x_begin);
+            let patch = x
+                .narrow(3, y_begin, y_end - y_begin)
+                .narrow(4, x_begin, x_end - x_begin);
             tiles.push((patch, (y_begin, x_begin), (y_end, x_end)));
 
             x_start += stride;
-            if x_start >= w { break; }
+            if x_start >= w {
+                break;
+            }
         }
         y += stride;
-        if y >= h { break; }
+        if y >= h {
+            break;
+        }
     }
 
     tiles
@@ -406,16 +413,28 @@ fn blend_tiles(tiles: &[Tile], shape: &[i64], _overlap: i64) -> Tensor {
         let tile_weight = Tensor::ones([1, 1, 1, h, w], (tch::Kind::Float, dev));
 
         // Extract existing slices as owned tensors (shallow_clone)
-        let old_out = output.narrow(3, *y_start, h).narrow(4, *x_start, w).shallow_clone();
-        let old_w = weight_sum.narrow(3, *y_start, h).narrow(4, *x_start, w).shallow_clone();
+        let old_out = output
+            .narrow(3, *y_start, h)
+            .narrow(4, *x_start, w)
+            .shallow_clone();
+        let old_w = weight_sum
+            .narrow(3, *y_start, h)
+            .narrow(4, *x_start, w)
+            .shallow_clone();
 
         // Compute new values
         let new_out = old_out + patch * &tile_weight;
         let new_w = old_w + tile_weight;
 
         // Write back using narrow views
-        output.narrow(3, *y_start, h).narrow(4, *x_start, w).copy_(&new_out);
-        weight_sum.narrow(3, *y_start, h).narrow(4, *x_start, w).copy_(&new_w);
+        output
+            .narrow(3, *y_start, h)
+            .narrow(4, *x_start, w)
+            .copy_(&new_out);
+        weight_sum
+            .narrow(3, *y_start, h)
+            .narrow(4, *x_start, w)
+            .copy_(&new_w);
     }
 
     output / (weight_sum + Tensor::from_slice(&[STABILITY_EPS as f32]).to_device(dev))
@@ -460,8 +479,14 @@ fn load_init_image(
     let zeros = Tensor::zeros([1, 1, frames, height, width], (Kind::Float, device));
     let latent = Tensor::cat(&[&t, &zeros], 1);
 
-    eprintln!("loaded init image (no VAE): {path} -> [{}, {}, {}, {}, {}]",
-        latent.size()[0], latent.size()[1], latent.size()[2], latent.size()[3], latent.size()[4]);
+    eprintln!(
+        "loaded init image (no VAE): {path} -> [{}, {}, {}, {}, {}]",
+        latent.size()[0],
+        latent.size()[1],
+        latent.size()[2],
+        latent.size()[3],
+        latent.size()[4]
+    );
     Ok(latent)
 }
 
@@ -506,12 +531,12 @@ fn encode_via_vae(
     let block_descs = default_encoder_block_descs();
     let encoder = VideoEncoder::new(
         &vs.root(),
-        48, // CONV_IN_CHANNELS = 3 * 4 * 4
+        48,  // CONV_IN_CHANNELS = 3 * 4 * 4
         128, // base_channels
         &block_descs,
         129, // ENCODER_CONV_OUT_CHANNELS
         NormLayerType::Group,
-        32,  // norm_num_groups
+        32, // norm_num_groups
         false,
     );
 
@@ -572,11 +597,21 @@ fn decode_via_vae(
     // Free decoder weights
     drop(vs);
 
-    eprintln!("  decoded latent {:?} → pixel {:?}", latent.size(), pixel.size());
+    eprintln!(
+        "  decoded latent {:?} → pixel {:?}",
+        latent.size(),
+        pixel.size()
+    );
     Ok(pixel)
 }
 
-fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64, context_dim: Option<i64>) -> LTXModel {
+fn build_model(
+    vs: &tch::nn::Path,
+    dim: i64,
+    patch_dim: i64,
+    num_layers: i64,
+    context_dim: Option<i64>,
+) -> LTXModel {
     let mut blocks = Vec::new();
     for i in 0..num_layers {
         blocks.push(BasicAVTransformerBlock::new(
@@ -708,26 +743,25 @@ fn load_weights(vs: &tch::nn::VarStore, path: &str) -> Result<u32, String> {
 
 /// Phase 1: Load text encoder, encode prompt, return context tensor.
 /// Uses memory-mapped I/O to avoid loading the full 18GB file into RAM.
-fn encode_prompt(
-    tok_path: &str,
-    tw_path: &str,
-    prompt: &str,
-) -> Result<Tensor, String> {
+fn encode_prompt(tok_path: &str, tw_path: &str, prompt: &str) -> Result<Tensor, String> {
     eprintln!("loading text encoder (mmap)...");
 
     // Memory-map the file — no 18GB allocation
     let file = std::fs::File::open(tw_path).map_err(|e| format!("open {tw_path}: {e}"))?;
     let mmap = unsafe { memmap2::Mmap::map(&file).map_err(|e| format!("mmap: {e}"))? };
-    let st = safetensors::SafeTensors::deserialize(&mmap)
-        .map_err(|e| format!("deserialize: {e}"))?;
+    let st =
+        safetensors::SafeTensors::deserialize(&mmap).map_err(|e| format!("deserialize: {e}"))?;
 
-    let is_t5 = st.tensors().iter().any(|(k, _)| k.starts_with("encoder.block."));
+    let is_t5 = st
+        .tensors()
+        .iter()
+        .any(|(k, _)| k.starts_with("encoder.block."));
 
     let (encoder, hidden) = if is_t5 {
         eprintln!("  T5 encoder detected (direct load, FP16)");
         let config = configurator::default_t5_config();
-        let tokenizer = LTXVGemmaTokenizer::from_file(tok_path, 512)
-            .map_err(|e| format!("tokenizer: {e}"))?;
+        let tokenizer =
+            LTXVGemmaTokenizer::from_file(tok_path, 512).map_err(|e| format!("tokenizer: {e}"))?;
         let enc = T5TextEncoder::from_checkpoint(&st, &config, tokenizer, 512, Device::Cpu);
         let h = enc.hidden_size();
         (TextEncoder::T5(enc), h)
@@ -768,7 +802,11 @@ fn main() {
             eprintln!("error: read {path}: {e}");
             process::exit(1);
         });
-        let ps: Vec<String> = content.lines().filter(|l| !l.trim().is_empty()).map(|l| l.trim().to_string()).collect();
+        let ps: Vec<String> = content
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| l.trim().to_string())
+            .collect();
         eprintln!("batch: {} prompts from {path}", ps.len());
         ps
     } else {
@@ -788,7 +826,12 @@ fn main() {
     let vs = tch::nn::VarStore::new(device);
 
     let patchify_proj = if !use_random {
-        Some(tch::nn::linear(vs.root() / "patchify_proj", patch_dim, dim, Default::default()))
+        Some(tch::nn::linear(
+            vs.root() / "patchify_proj",
+            patch_dim,
+            dim,
+            Default::default(),
+        ))
     } else {
         None
     };
@@ -802,7 +845,10 @@ fn main() {
     }
 
     let n_params: usize = vs.variables().values().map(|t| t.numel()).sum();
-    eprintln!("ready: {dim}d, {num_layers} layers, {:.1}M params on {device:?}", n_params as f64 / 1e6);
+    eprintln!(
+        "ready: {dim}d, {num_layers} layers, {:.1}M params on {device:?}",
+        n_params as f64 / 1e6
+    );
     if device != Device::Cpu {
         eprintln!("GPU mode: transformer weights and all denoising tensors on-device");
     }
@@ -819,7 +865,12 @@ fn main() {
             match encode_prompt(tok, tw, prompt) {
                 Ok(ctx) => {
                     if batch_mode {
-                        eprintln!("  [{}/{}] encoded (seq_len={})", i + 1, prompts.len(), ctx.size()[1]);
+                        eprintln!(
+                            "  [{}/{}] encoded (seq_len={})",
+                            i + 1,
+                            prompts.len(),
+                            ctx.size()[1]
+                        );
                     }
                     ctxs.push(ctx);
                 }
@@ -846,7 +897,10 @@ fn main() {
         ctxs
     } else {
         eprintln!("no text encoder — using random contexts");
-        prompts.iter().map(|_| Tensor::randn([1, 4, dim], (Kind::Float, device))).collect()
+        prompts
+            .iter()
+            .map(|_| Tensor::randn([1, 4, dim], (Kind::Float, device)))
+            .collect()
     };
 
     // Load init image for img2img (once, shared across prompts)
@@ -856,7 +910,14 @@ fn main() {
             eprintln!("error: --strength must be in [0.0, 1.0]");
             process::exit(1);
         }
-        match load_init_image(img_path, args.frames, args.height, args.width, device, args.vae_weights.as_deref()) {
+        match load_init_image(
+            img_path,
+            args.frames,
+            args.height,
+            args.width,
+            device,
+            args.vae_weights.as_deref(),
+        ) {
             Ok(img) => {
                 eprintln!("img2img mode: strength={strength:.2}");
                 Some(img)
@@ -877,7 +938,11 @@ fn main() {
     let mut timings: Vec<f64> = Vec::with_capacity(total);
 
     for (idx, prompt) in prompts.iter().enumerate() {
-        let prompt_label = if batch_mode { format!("[{}/{}] ", idx + 1, total) } else { String::new() };
+        let prompt_label = if batch_mode {
+            format!("[{}/{}] ", idx + 1, total)
+        } else {
+            String::new()
+        };
 
         // Skip if resuming and output already exists
         if args.resume {
@@ -917,9 +982,20 @@ fn main() {
         let model = if let Some(ref shard_str) = args.shard {
             let shard_devices = parse_shard_devices(shard_str);
             if shard_devices.len() > 1 {
-                eprintln!("{prompt_label}sharding model across {} GPUs: {:?}", shard_devices.len(), shard_devices);
+                eprintln!(
+                    "{prompt_label}sharding model across {} GPUs: {:?}",
+                    shard_devices.len(),
+                    shard_devices
+                );
             }
-            build_model_sharded(&vs.root(), dim, patch_dim, num_layers, context_dim, &shard_devices)
+            build_model_sharded(
+                &vs.root(),
+                dim,
+                patch_dim,
+                num_layers,
+                context_dim,
+                &shard_devices,
+            )
         } else if context_dim.is_some() {
             build_model(&vs.root(), dim, patch_dim, num_layers, context_dim)
         } else {
@@ -927,7 +1003,10 @@ fn main() {
         };
 
         // Pre-compute unconditional context (cached across steps)
-        let uncond_context = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
+        let uncond_context = Tensor::zeros(
+            [1, context.size()[1], context.size()[2]],
+            (Kind::Float, device),
+        );
 
         // Denoise
         let scheduler = Ltx2Scheduler::default();
@@ -935,7 +1014,10 @@ fn main() {
         let sigmas = scheduler.sigmas(args.steps);
 
         // Log configuration
-        eprintln!("{prompt_label}step={}, guider={}, cfg={}", args.step_method, args.guider, args.cfg);
+        eprintln!(
+            "{prompt_label}step={}, guider={}, cfg={}",
+            args.step_method, args.guider, args.cfg
+        );
 
         let t0 = std::time::Instant::now();
 
@@ -949,7 +1031,8 @@ fn main() {
 
             eprintln!(
                 "{prompt_label}img2img: {} steps from sigma {:.4}, strength={strength:.2}",
-                args.steps - start_step, start_sigma
+                args.steps - start_step,
+                start_sigma
             );
 
             let noise = Tensor::randn_like(init_latent);
@@ -958,8 +1041,17 @@ fn main() {
         } else {
             // txt2img: start from pure noise
             tch::manual_seed(args.seed);
-            eprintln!("{prompt_label}denoising: {} steps, cfg={}, seed={}", args.steps, args.cfg, args.seed);
-            (Tensor::randn([b, c, args.frames, args.height, args.width], (Kind::Float, device)), 0)
+            eprintln!(
+                "{prompt_label}denoising: {} steps, cfg={}, seed={}",
+                args.steps, args.cfg, args.seed
+            );
+            (
+                Tensor::randn(
+                    [b, c, args.frames, args.height, args.width],
+                    (Kind::Float, device),
+                ),
+                0,
+            )
         };
         for i in start_step..args.steps {
             let sigma = sigmas[i];
@@ -982,20 +1074,37 @@ fn main() {
                     let timestep = Tensor::from_slice(&[sigma as f32]).to_device(device);
                     let cond_pred = model.forward(&projected, &timestep, context, None, None);
 
-                    let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
+                    let uncond_pred =
+                        model.forward(&projected, &timestep, &uncond_context, None, None);
 
                     let guided = match args.guider.as_str() {
-                        "apg" => APG::new(args.apg_scale, args.apg_momentum).guide(&cond_pred, &uncond_pred),
-                        "stg" => STG::new(args.stg_spatial_scale, args.stg_temporal_scale).guide(&cond_pred, &uncond_pred),
+                        "apg" => APG::new(args.apg_scale, args.apg_momentum)
+                            .guide(&cond_pred, &uncond_pred),
+                        "stg" => STG::new(args.stg_spatial_scale, args.stg_temporal_scale)
+                            .guide(&cond_pred, &uncond_pred),
                         _ => CFG::new(args.cfg).guide(&cond_pred, &uncond_pred),
                     };
 
-                    let tile_denoised = unpatchify_5d(&guided, b, c, patch.size()[2], patch.size()[3], patch.size()[4], p1, p2, p3);
+                    let tile_denoised = unpatchify_5d(
+                        &guided,
+                        b,
+                        c,
+                        patch.size()[2],
+                        patch.size()[3],
+                        patch.size()[4],
+                        p1,
+                        p2,
+                        p3,
+                    );
                     denoised_tiles.push((tile_denoised, *y_range, *x_range));
                 }
 
                 // Blend tiled results back together
-                blend_tiles(&denoised_tiles, &[b, c, args.frames, args.height, args.width], args.tile_overlap)
+                blend_tiles(
+                    &denoised_tiles,
+                    &[b, c, args.frames, args.height, args.width],
+                    args.tile_overlap,
+                )
             } else {
                 // Standard full-frame denoising
                 let patched = patchify_5d(&x, p1, p2, p3);
@@ -1011,12 +1120,25 @@ fn main() {
                 let uncond_pred = model.forward(&projected, &timestep, &uncond_context, None, None);
 
                 let guided = match args.guider.as_str() {
-                    "apg" => APG::new(args.apg_scale, args.apg_momentum).guide(&cond_pred, &uncond_pred),
-                    "stg" => STG::new(args.stg_spatial_scale, args.stg_temporal_scale).guide(&cond_pred, &uncond_pred),
+                    "apg" => {
+                        APG::new(args.apg_scale, args.apg_momentum).guide(&cond_pred, &uncond_pred)
+                    }
+                    "stg" => STG::new(args.stg_spatial_scale, args.stg_temporal_scale)
+                        .guide(&cond_pred, &uncond_pred),
                     _ => CFG::new(args.cfg).guide(&cond_pred, &uncond_pred),
                 };
 
-                unpatchify_5d(&guided, b, c, args.frames, args.height, args.width, p1, p2, p3)
+                unpatchify_5d(
+                    &guided,
+                    b,
+                    c,
+                    args.frames,
+                    args.height,
+                    args.width,
+                    p1,
+                    p2,
+                    p3,
+                )
             };
 
             // Apply diffusion step
@@ -1027,7 +1149,14 @@ fn main() {
 
             let mean = x.mean(Kind::Float).double_value(&[]);
             let s = x.std(false).double_value(&[]);
-            eprintln!("{prompt_label}  [{:>2}/{}] sigma={:.4} mean={:.4} std={:.4}", i + 1, args.steps, sigma, mean, s);
+            eprintln!(
+                "{prompt_label}  [{:>2}/{}] sigma={:.4} mean={:.4} std={:.4}",
+                i + 1,
+                args.steps,
+                sigma,
+                mean,
+                s
+            );
         }
         let elapsed = t0.elapsed().as_secs_f64();
         timings.push(elapsed);
@@ -1058,7 +1187,13 @@ fn main() {
         } else {
             std::path::PathBuf::from("output_frames")
         };
-        save_frames(&output_tensor.to_device(Device::Cpu), &out_dir, args.frames, args.height, args.width);
+        save_frames(
+            &output_tensor.to_device(Device::Cpu),
+            &out_dir,
+            args.frames,
+            args.height,
+            args.width,
+        );
 
         // Save GIF
         let gif_path = if batch_mode {
@@ -1067,7 +1202,13 @@ fn main() {
             std::path::PathBuf::from("output.gif")
         };
         let _ = std::fs::create_dir_all(gif_path.parent().unwrap_or(std::path::Path::new(".")));
-        if let Err(e) = save_gif(&output_tensor.to_device(Device::Cpu), args.frames, args.height, args.width, &gif_path) {
+        if let Err(e) = save_gif(
+            &output_tensor.to_device(Device::Cpu),
+            args.frames,
+            args.height,
+            args.width,
+            &gif_path,
+        ) {
             eprintln!("{prompt_label}  gif: {e}");
         } else {
             eprintln!("{prompt_label}  saved: {}", gif_path.display());
@@ -1092,14 +1233,25 @@ fn main() {
                 // Video latent: (B, 128, T_v, H, W) → Audio latent: (B, 64, T_v, 128)
                 let audio_t = x.size()[2]; // temporal frames from video
                 let audio_latent = Tensor::randn(
-                    [b, audio_config.latent_channels, audio_t, audio_config.input_features],
+                    [
+                        b,
+                        audio_config.latent_channels,
+                        audio_t,
+                        audio_config.input_features,
+                    ],
                     (Kind::Float, device),
                 );
 
                 // Denoise audio latent using the same transformer as video
                 let denoised_audio = denoise_audio(
-                    &audio_latent, &model, context, &uncond_context,
-                    patchify_proj.as_ref(), device, args.steps, args.cfg,
+                    &audio_latent,
+                    &model,
+                    context,
+                    &uncond_context,
+                    patchify_proj.as_ref(),
+                    device,
+                    args.steps,
+                    args.cfg,
                 );
 
                 // Decode audio through VAE decoder
@@ -1110,7 +1262,7 @@ fn main() {
                 // convert the mel spectrogram to a proper waveform here)
                 // Average over mel bins (dim 1) to get waveform-like output
                 let audio_samples = audio_mel
-                    .narrow(1, 0, 1)                     // Take first mel bin as a simple waveform approximation;
+                    .narrow(1, 0, 1) // Take first mel bin as a simple waveform approximation;
                     // full vocoder would use all mel bins for high-fidelity output
                     .squeeze_dim(1);
                 let audio_path = if batch_mode {
@@ -1118,7 +1270,8 @@ fn main() {
                 } else {
                     std::path::PathBuf::from(&args.audio_output)
                 };
-                if let Err(e) = save_wav(&audio_samples.to_device(Device::Cpu), &audio_path, 44100) {
+                if let Err(e) = save_wav(&audio_samples.to_device(Device::Cpu), &audio_path, 44100)
+                {
                     eprintln!("{prompt_label}  audio save error: {e}");
                 }
 
@@ -1144,12 +1297,23 @@ fn main() {
     if batch_mode {
         let total_time: f64 = timings.iter().sum();
         let active: Vec<f64> = timings.iter().copied().filter(|t| *t > 0.0).collect();
-        let avg = if active.is_empty() { 0.0 } else { active.iter().sum::<f64>() / active.len() as f64 };
+        let avg = if active.is_empty() {
+            0.0
+        } else {
+            active.iter().sum::<f64>() / active.len() as f64
+        };
         eprintln!("\nbatch complete: {completed} succeeded, {failed} failed out of {total}");
         eprintln!("total time: {total_time:.1}s, avg per prompt: {avg:.1}s");
 
         // Write manifest.json
-        let _ = write_manifest(&args.output_dir, &prompts, &timings, args.steps, args.cfg, args.seed);
+        let _ = write_manifest(
+            &args.output_dir,
+            &prompts,
+            &timings,
+            args.steps,
+            args.cfg,
+            args.seed,
+        );
     } else {
         eprintln!("done");
     }
@@ -1183,7 +1347,9 @@ fn save_frames(x: &Tensor, dir: &std::path::Path, frames: i64, h: i64, w: i64) {
 
         // Flatten to contiguous [h*w*3] before extracting values
         let flat = frame.reshape([h * w * 3]);
-        let frame_bytes: Vec<u8> = (0..flat.size()[0]).map(|j| flat.double_value(&[j]) as u8).collect();
+        let frame_bytes: Vec<u8> = (0..flat.size()[0])
+            .map(|j| flat.double_value(&[j]) as u8)
+            .collect();
 
         let mut img = image::ImageBuffer::new(w as u32, h as u32);
         for (pixel_out, rgb) in img.pixels_mut().zip(frame_bytes.chunks(3)) {
@@ -1201,14 +1367,25 @@ fn save_frames(x: &Tensor, dir: &std::path::Path, frames: i64, h: i64, w: i64) {
         if let Ok(mut f) = std::fs::File::create(&path) {
             let _ = write!(f, "P6\n{w} {h}\n255\n");
             let data = frame.reshape([h * w * 3]);
-            let bytes: Vec<u8> = (0..data.size()[0]).map(|j| data.double_value(&[j]) as u8).collect();
+            let bytes: Vec<u8> = (0..data.size()[0])
+                .map(|j| data.double_value(&[j]) as u8)
+                .collect();
             let _ = f.write_all(&bytes);
         }
     }
 }
 
-fn save_gif(x: &Tensor, frames: i64, h: i64, w: i64, output: &std::path::Path) -> Result<(), String> {
-    let tmp_dir = output.parent().unwrap_or(std::path::Path::new(".")).join(".tmp_gif");
+fn save_gif(
+    x: &Tensor,
+    frames: i64,
+    h: i64,
+    w: i64,
+    output: &std::path::Path,
+) -> Result<(), String> {
+    let tmp_dir = output
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join(".tmp_gif");
     std::fs::create_dir_all(&tmp_dir).map_err(|e| format!("create tmp: {e}"))?;
 
     // Save PGM frames
@@ -1231,20 +1408,38 @@ fn save_gif(x: &Tensor, frames: i64, h: i64, w: i64, output: &std::path::Path) -
         if let Ok(mut f) = std::fs::File::create(&path) {
             let _ = write!(f, "P6\n{w} {h}\n255\n");
             let data = frame.reshape([h * w * 3]);
-            let bytes: Vec<u8> = (0..data.size()[0]).map(|j| data.double_value(&[j]) as u8).collect();
+            let bytes: Vec<u8> = (0..data.size()[0])
+                .map(|j| data.double_value(&[j]) as u8)
+                .collect();
             let _ = f.write_all(&bytes);
         }
     }
 
-    let filter = "scale=256:256:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse".to_string();
+    let filter =
+        "scale=256:256:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse".to_string();
     let status = std::process::Command::new("ffmpeg")
-        .args(["-y", "-framerate", "8", "-i", tmp_dir.join("frame_%04d.pgm").to_str().unwrap_or(""), "-vf", &filter, "-loop", "0", output.to_str().unwrap_or("")])
+        .args([
+            "-y",
+            "-framerate",
+            "8",
+            "-i",
+            tmp_dir.join("frame_%04d.pgm").to_str().unwrap_or(""),
+            "-vf",
+            &filter,
+            "-loop",
+            "0",
+            output.to_str().unwrap_or(""),
+        ])
         .status()
         .map_err(|e| format!("ffmpeg: {e}"))?;
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
-    if status.success() { Ok(()) } else { Err("ffmpeg failed".to_string()) }
+    if status.success() {
+        Ok(())
+    } else {
+        Err("ffmpeg failed".to_string())
+    }
 }
 
 fn write_manifest(
@@ -1261,7 +1456,10 @@ fn write_manifest(
     for (i, (prompt, time)) in prompts.iter().zip(timings.iter()).enumerate() {
         entries.push(format!(
             r#"  {{ "index": {}, "prompt": {:?}, "output": "{:04}/", "time_s": {:.1} }}"#,
-            i + 1, prompt, i + 1, time
+            i + 1,
+            prompt,
+            i + 1,
+            time
         ));
     }
     let json = format!(
@@ -1294,7 +1492,8 @@ fn save_wav(audio: &Tensor, path: &std::path::Path, sample_rate: u32) -> Result<
     let file_size = 36 + data_size;
 
     use std::io::Write;
-    let mut f = std::fs::File::create(path).map_err(|e| format!("create {}: {e}", path.display()))?;
+    let mut f =
+        std::fs::File::create(path).map_err(|e| format!("create {}: {e}", path.display()))?;
 
     // WAV header
     f.write_all(b"RIFF").unwrap();
@@ -1314,7 +1513,10 @@ fn save_wav(audio: &Tensor, path: &std::path::Path, sample_rate: u32) -> Result<
         f.write_all(&s.to_le_bytes()).unwrap();
     }
 
-    eprintln!("  saved WAV: {} ({n_samples} samples, {sample_rate} Hz)", path.display());
+    eprintln!(
+        "  saved WAV: {} ({n_samples} samples, {sample_rate} Hz)",
+        path.display()
+    );
     Ok(())
 }
 

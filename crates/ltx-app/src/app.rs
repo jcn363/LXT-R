@@ -36,9 +36,7 @@ impl eframe::App for LtxApp {
         // Repaint while inference is running
         if matches!(
             self.state.inference,
-            InferenceState::Loading
-                | InferenceState::Denoising { .. }
-                | InferenceState::Decoding
+            InferenceState::Loading | InferenceState::Denoising { .. } | InferenceState::Decoding
         ) {
             ctx.request_repaint();
         }

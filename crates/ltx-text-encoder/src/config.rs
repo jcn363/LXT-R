@@ -54,5 +54,9 @@ pub struct T5ConfigData {
     pub dense_act_fn: String,
 }
 
-fn default_num_buckets() -> i64 { 32 }
-fn default_max_distance() -> i64 { 128 }
+fn default_num_buckets() -> i64 {
+    32
+}
+fn default_max_distance() -> i64 {
+    128
+}

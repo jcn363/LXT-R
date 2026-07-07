@@ -61,10 +61,30 @@ impl SigLIPVisionAttention {
             ..Default::default()
         };
         Self {
-            q_proj: tch::nn::linear(vs / "q_proj", config.hidden_size, config.hidden_size, linear_cfg),
-            k_proj: tch::nn::linear(vs / "k_proj", config.hidden_size, config.hidden_size, linear_cfg),
-            v_proj: tch::nn::linear(vs / "v_proj", config.hidden_size, config.hidden_size, linear_cfg),
-            out_proj: tch::nn::linear(vs / "out_proj", config.hidden_size, config.hidden_size, linear_cfg),
+            q_proj: tch::nn::linear(
+                vs / "q_proj",
+                config.hidden_size,
+                config.hidden_size,
+                linear_cfg,
+            ),
+            k_proj: tch::nn::linear(
+                vs / "k_proj",
+                config.hidden_size,
+                config.hidden_size,
+                linear_cfg,
+            ),
+            v_proj: tch::nn::linear(
+                vs / "v_proj",
+                config.hidden_size,
+                config.hidden_size,
+                linear_cfg,
+            ),
+            out_proj: tch::nn::linear(
+                vs / "out_proj",
+                config.hidden_size,
+                config.hidden_size,
+                linear_cfg,
+            ),
             num_heads: config.num_attention_heads,
             head_dim,
         }
@@ -74,13 +94,19 @@ impl SigLIPVisionAttention {
         let b = x.size()[0];
         let n = x.size()[1];
 
-        let q = self.q_proj.forward_t(x, false)
+        let q = self
+            .q_proj
+            .forward_t(x, false)
             .reshape([b, n, self.num_heads, self.head_dim])
             .transpose(1, 2);
-        let k = self.k_proj.forward_t(x, false)
+        let k = self
+            .k_proj
+            .forward_t(x, false)
             .reshape([b, n, self.num_heads, self.head_dim])
             .transpose(1, 2);
-        let v = self.v_proj.forward_t(x, false)
+        let v = self
+            .v_proj
+            .forward_t(x, false)
             .reshape([b, n, self.num_heads, self.head_dim])
             .transpose(1, 2);
 
@@ -151,14 +177,20 @@ impl SigLIPVisionTower {
 
         let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
         for i in 0..config.num_hidden_layers {
-            layers.push(SigLIPVisionBlock::new(vs / format!("encoder/layers/{i}"), config));
+            layers.push(SigLIPVisionBlock::new(
+                vs / format!("encoder/layers/{i}"),
+                config,
+            ));
         }
 
         Self {
             patch_embed_weight,
             position_embed_weight,
             layers,
-            post_layernorm: RMSNorm::default_eps_with_path(vs / "post_layernorm", config.hidden_size),
+            post_layernorm: RMSNorm::default_eps_with_path(
+                vs / "post_layernorm",
+                config.hidden_size,
+            ),
             hidden_size: config.hidden_size,
             patch_size: config.patch_size,
         }

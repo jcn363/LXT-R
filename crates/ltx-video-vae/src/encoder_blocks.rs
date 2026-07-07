@@ -20,7 +20,12 @@ pub fn make_resblock_stage(
     (0..num_blocks)
         .map(|j| {
             make_resblock(
-                3, channels, channels, norm_type, norm_groups, causal,
+                3,
+                channels,
+                channels,
+                norm_type,
+                norm_groups,
+                causal,
                 vs / "res_blocks" / j,
             )
         })
@@ -44,13 +49,19 @@ pub struct SpatialConv3d {
 
 impl std::fmt::Debug for SpatialConv3d {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SpatialConv3d").field("weight", &self.weight.size()).finish()
+        f.debug_struct("SpatialConv3d")
+            .field("weight", &self.weight.size())
+            .finish()
     }
 }
 
 impl SpatialConv3d {
     pub fn new(vs: &Path, in_ch: i64, out_ch: i64, kernel: i64) -> Self {
-        let weight = vs.var("weight", &[out_ch, in_ch, kernel, kernel, kernel], tch::nn::init::Init::Const(0.0));
+        let weight = vs.var(
+            "weight",
+            &[out_ch, in_ch, kernel, kernel, kernel],
+            tch::nn::init::Init::Const(0.0),
+        );
         let bias = vs.var("bias", &[out_ch], tch::nn::init::Init::Const(0.0));
         Self { weight, bias }
     }
@@ -60,7 +71,14 @@ impl SpatialConv3d {
         let pad_t = (k[2] - 1) / 2;
         let pad_h = (k[3] - 1) / 2;
         let pad_w = (k[4] - 1) / 2;
-        x.conv3d(&self.weight, Some(&self.bias), [1, 2, 2], [pad_t, pad_h, pad_w], [1, 1, 1], 1)
+        x.conv3d(
+            &self.weight,
+            Some(&self.bias),
+            [1, 2, 2],
+            [pad_t, pad_h, pad_w],
+            [1, 1, 1],
+            1,
+        )
     }
 
     pub fn forward_spatial1(&self, x: &Tensor) -> Tensor {
@@ -68,7 +86,14 @@ impl SpatialConv3d {
         let pad_t = (k[2] - 1) / 2;
         let pad_h = (k[3] - 1) / 2;
         let pad_w = (k[4] - 1) / 2;
-        x.conv3d(&self.weight, Some(&self.bias), [1, 1, 1], [pad_t, pad_h, pad_w], [1, 1, 1], 1)
+        x.conv3d(
+            &self.weight,
+            Some(&self.bias),
+            [1, 1, 1],
+            [pad_t, pad_h, pad_w],
+            [1, 1, 1],
+            1,
+        )
     }
 
     pub fn forward_all2(&self, x: &Tensor) -> Tensor {
@@ -76,7 +101,14 @@ impl SpatialConv3d {
         let pad_t = (k[2] - 1) / 2;
         let pad_h = (k[3] - 1) / 2;
         let pad_w = (k[4] - 1) / 2;
-        x.conv3d(&self.weight, Some(&self.bias), [2, 2, 2], [pad_t, pad_h, pad_w], [1, 1, 1], 1)
+        x.conv3d(
+            &self.weight,
+            Some(&self.bias),
+            [2, 2, 2],
+            [pad_t, pad_h, pad_w],
+            [1, 1, 1],
+            1,
+        )
     }
 }
 
@@ -98,8 +130,8 @@ impl DownsampleConv {
 
 pub struct ChannelChangeDownsample {
     norm: Box<dyn ModuleT>,
-    conv1: SpatialConv3d,   // stride (1,1,1)
-    conv2: SpatialConv3d,   // stride (1,1,1)
+    conv1: SpatialConv3d,    // stride (1,1,1)
+    conv2: SpatialConv3d,    // stride (1,1,1)
     shortcut: SpatialConv3d, // stride (1,1,1) to match conv1
 }
 
@@ -110,12 +142,23 @@ impl std::fmt::Debug for ChannelChangeDownsample {
 }
 
 impl ChannelChangeDownsample {
-    pub fn new(vs: &Path, in_ch: i64, out_ch: i64, norm_type: NormLayerType, norm_groups: i64) -> Self {
+    pub fn new(
+        vs: &Path,
+        in_ch: i64,
+        out_ch: i64,
+        norm_type: NormLayerType,
+        norm_groups: i64,
+    ) -> Self {
         let norm = build_norm_layer(norm_type, in_ch, norm_groups);
         let conv1 = SpatialConv3d::new(&(vs / "conv1"), in_ch, out_ch, 3);
         let conv2 = SpatialConv3d::new(&(vs / "conv2"), out_ch, out_ch, 3);
         let shortcut = SpatialConv3d::new(&(vs / "conv_shortcut"), in_ch, out_ch, 1);
-        Self { norm, conv1, conv2, shortcut }
+        Self {
+            norm,
+            conv1,
+            conv2,
+            shortcut,
+        }
     }
 }
 

@@ -118,9 +118,15 @@ impl Gemma3Attention {
 
         // Apply QK norms per-head (norm weight is head_dim-sized)
         let q_flat = q.reshape([b * seq_len * self.num_heads, self.head_dim]);
-        let q = self.q_norm.forward(&q_flat).reshape([b, seq_len, self.num_heads, self.head_dim]);
+        let q = self
+            .q_norm
+            .forward(&q_flat)
+            .reshape([b, seq_len, self.num_heads, self.head_dim]);
         let k_flat = k.reshape([b * seq_len * self.num_kv_heads, self.head_dim]);
-        let k = self.k_norm.forward(&k_flat).reshape([b, seq_len, self.num_kv_heads, self.head_dim]);
+        let k =
+            self.k_norm
+                .forward(&k_flat)
+                .reshape([b, seq_len, self.num_kv_heads, self.head_dim]);
 
         // RoPE: precompute_freqs_cis returns [S, d] but apply_rotary_emb
         // needs cos/sin to broadcast with [B, S, n, head_dim].
@@ -131,7 +137,9 @@ impl Gemma3Attention {
 
         let q = q_rot.transpose(1, 2);
         let k = k_rot.transpose(1, 2);
-        let v = v.reshape([b, seq_len, self.num_kv_heads, self.head_dim]).transpose(1, 2);
+        let v = v
+            .reshape([b, seq_len, self.num_kv_heads, self.head_dim])
+            .transpose(1, 2);
 
         let repeat_factor = self.num_heads / self.num_kv_heads;
         let k = k.repeat_interleave_self_int(repeat_factor, 1, None);
@@ -159,7 +167,10 @@ impl Gemma3DecoderLayer {
             self_attn: Gemma3Attention::new(vs / "self_attn", config),
             mlp: Gemma3MLP::new(vs / "mlp", config),
             input_norm: RMSNorm::default_eps_with_path(vs / "input_norm", config.hidden_size),
-            post_attn_norm: RMSNorm::default_eps_with_path(vs / "post_attn_norm", config.hidden_size),
+            post_attn_norm: RMSNorm::default_eps_with_path(
+                vs / "post_attn_norm",
+                config.hidden_size,
+            ),
         }
     }
 
@@ -226,10 +237,11 @@ impl Gemma3TextModel {
 
         let b = input_ids.size()[0];
         let flat_ids = input_ids.to_kind(tch::Kind::Int64).flatten(0, -1);
-        let hidden_states = self
-            .embed_tokens
-            .index_select(0, &flat_ids)
-            .reshape([b, seq_len, self.config.hidden_size]);
+        let hidden_states = self.embed_tokens.index_select(0, &flat_ids).reshape([
+            b,
+            seq_len,
+            self.config.hidden_size,
+        ]);
 
         let mut hidden_states = hidden_states;
         for layer in &self.layers {

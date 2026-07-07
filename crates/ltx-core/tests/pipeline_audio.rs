@@ -68,7 +68,11 @@ fn test_audio_diffusion_pipeline() {
 fn test_audio_pipeline_various_configs() {
     let vs = make_vs();
 
-    for &(c, f, t) in &[(4i64, 16i64, 8i64), (8i64, 32i64, 16i64), (2i64, 8i64, 4i64)] {
+    for &(c, f, t) in &[
+        (4i64, 16i64, 8i64),
+        (8i64, 32i64, 16i64),
+        (2i64, 8i64, 4i64),
+    ] {
         let d = c * f;
         let b = 1i64;
 

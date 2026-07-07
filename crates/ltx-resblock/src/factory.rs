@@ -34,11 +34,7 @@ pub fn make_resblock(
             norm_groups,
             causal,
         )),
-        2 => Box::new(ResnetBlock2D::new(
-            vs,
-            in_channels,
-            out_channels,
-        )),
+        2 => Box::new(ResnetBlock2D::new(vs, in_channels, out_channels)),
         _ => panic!("make_resblock: unsupported dims={dims} (only 2 or 3 supported)"),
     }
 }

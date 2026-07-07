@@ -78,7 +78,11 @@ fn test_video_pipeline_various_resolutions() {
     let vs = make_vs();
     let (p1, p2, p3) = (2i64, 4i64, 4i64);
 
-    for &(f, h, w) in &[(4i64, 16i64, 16i64), (8i64, 32i64, 32i64), (2i64, 8i64, 8i64)] {
+    for &(f, h, w) in &[
+        (4i64, 16i64, 16i64),
+        (8i64, 32i64, 32i64),
+        (2i64, 8i64, 8i64),
+    ] {
         let c = 4i64;
         let b = 1i64;
         let d = c * p1 * p2 * p3;
@@ -162,7 +166,7 @@ fn test_video_pipeline_deep_transformer() {
 /// Pipeline with RoPE applied (simulating positional encoding).
 #[test]
 fn test_video_pipeline_with_rope() {
-    use ltx_attention::{precompute_freqs_cis, apply_rotary_emb};
+    use ltx_attention::{apply_rotary_emb, precompute_freqs_cis};
 
     let vs = make_vs();
     let (b, c, f, h, w) = (1i64, 4i64, 4i64, 16i64, 16i64);

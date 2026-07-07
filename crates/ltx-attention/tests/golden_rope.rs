@@ -52,8 +52,10 @@ fn test_golden_rope_norm_preservation() {
 /// Golden test: RoPE precompute cos/sin match Python reference.
 #[test]
 fn test_golden_rope_precompute_from_file() {
-    let expected_cos = ltx_test_utils::load_golden("crates/goldens/rope_precompute.safetensors", "cos");
-    let expected_sin = ltx_test_utils::load_golden("crates/goldens/rope_precompute.safetensors", "sin");
+    let expected_cos =
+        ltx_test_utils::load_golden("crates/goldens/rope_precompute.safetensors", "cos");
+    let expected_sin =
+        ltx_test_utils::load_golden("crates/goldens/rope_precompute.safetensors", "sin");
 
     let dim = expected_cos.size()[1] * 2;
     let max_seq = expected_cos.size()[0];

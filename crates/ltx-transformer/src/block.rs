@@ -38,9 +38,8 @@ impl AudioModality {
         context_dim: Option<i64>,
         rope_type: RopeType,
     ) -> Self {
-        let adaln = AdaLayerNormSingle::new_with_input_dim(
-            &(vs / "adaln"), dim, DEFAULT_SINUSOIDAL_DIM,
-        );
+        let adaln =
+            AdaLayerNormSingle::new_with_input_dim(&(vs / "adaln"), dim, DEFAULT_SINUSOIDAL_DIM);
         let self_attn = TransformerAttention::new(
             &(vs / "audio_attn1"),
             dim,
@@ -82,8 +81,11 @@ impl AudioModality {
         );
         let norm_v2a = RMSNorm::default_eps_with_path(vs / "audio_norm_v2a", dim);
 
-        let scale_shift_table =
-            vs.var("audio_scale_shift_table", &[5, dim], tch::nn::init::Init::Const(0.0));
+        let scale_shift_table = vs.var(
+            "audio_scale_shift_table",
+            &[5, dim],
+            tch::nn::init::Init::Const(0.0),
+        );
 
         Self {
             adaln,
@@ -126,7 +128,8 @@ impl AudioModality {
         );
 
         // Audio self-attention
-        let h = self.norm1.forward(audio) * (Tensor::ones_like(&scale_msa) + &scale_msa) + &shift_msa;
+        let h =
+            self.norm1.forward(audio) * (Tensor::ones_like(&scale_msa) + &scale_msa) + &shift_msa;
         let h = self.self_attn.forward(&h, None, mask, pe);
         let audio = audio + &gate_msa * h;
 
@@ -136,7 +139,8 @@ impl AudioModality {
         let audio = audio + h;
 
         // Audio FFN
-        let h = self.norm2.forward(&audio) * (Tensor::ones_like(&scale_mlp) + &scale_mlp) + &shift_mlp;
+        let h =
+            self.norm2.forward(&audio) * (Tensor::ones_like(&scale_mlp) + &scale_mlp) + &shift_mlp;
         let h = self.ff.forward(&h);
         let audio = audio + &gate_mlp * h;
 
@@ -149,14 +153,16 @@ impl AudioModality {
         let shift_a2v = ss.narrow(0, 0, 1).unsqueeze(0).unsqueeze(0); // [1, 1, dim]
         let scale_a2v = ss.narrow(0, 1, 1).unsqueeze(0).unsqueeze(0);
         let gate_a2v = ss.narrow(0, 2, 1).unsqueeze(0).unsqueeze(0);
-        let video = video + gate_a2v * (h_a2v * (Tensor::ones_like(&scale_a2v) + &scale_a2v) + &shift_a2v);
+        let video =
+            video + gate_a2v * (h_a2v * (Tensor::ones_like(&scale_a2v) + &scale_a2v) + &shift_a2v);
 
         // V2A: audio attends to video
         let h_v2a = self.norm_v2a.forward(&audio);
         let h_v2a = self.v2a_attn.forward(&h_v2a, Some(&video), mask, None);
         let shift_v2a = ss.narrow(0, 3, 1).unsqueeze(0).unsqueeze(0);
         let gate_v2a = ss.narrow(0, 4, 1).unsqueeze(0).unsqueeze(0);
-        let audio = audio + gate_v2a * (h_v2a * (Tensor::ones_like(&shift_v2a) + &shift_v2a) + shift_v2a);
+        let audio =
+            audio + gate_v2a * (h_v2a * (Tensor::ones_like(&shift_v2a) + &shift_v2a) + shift_v2a);
 
         (video, audio)
     }
@@ -214,7 +220,16 @@ impl BasicAVTransformerBlock {
         // Plain new() is video-only for backward compatibility.
         let audio = None;
 
-        Self { adaln, self_attn, cross_attn, norm1, norm_cross, norm2, ff, audio }
+        Self {
+            adaln,
+            self_attn,
+            cross_attn,
+            norm1,
+            norm_cross,
+            norm2,
+            ff,
+            audio,
+        }
     }
 
     /// Create a block with explicit audio modality control.
@@ -230,10 +245,20 @@ impl BasicAVTransformerBlock {
         let adaln =
             AdaLayerNormSingle::new_with_input_dim(&(vs / "adaln"), dim, DEFAULT_SINUSOIDAL_DIM);
         let self_attn = TransformerAttention::new(
-            &(vs / "self_attn"), dim, num_heads, head_dim, None, rope_type,
+            &(vs / "self_attn"),
+            dim,
+            num_heads,
+            head_dim,
+            None,
+            rope_type,
         );
         let cross_attn = TransformerAttention::new(
-            &(vs / "cross_attn"), dim, num_heads, head_dim, context_dim, rope_type,
+            &(vs / "cross_attn"),
+            dim,
+            num_heads,
+            head_dim,
+            context_dim,
+            rope_type,
         );
         let norm1 = RMSNorm::default_eps_with_path(vs / "norm1", dim);
         let norm_cross = RMSNorm::default_eps_with_path(vs / "norm_cross", dim);
@@ -241,12 +266,28 @@ impl BasicAVTransformerBlock {
         let ff = FeedForward::new(&(vs / "ff"), dim);
 
         let audio = if enable_audio {
-            Some(AudioModality::new(vs, dim, num_heads, head_dim, context_dim, rope_type))
+            Some(AudioModality::new(
+                vs,
+                dim,
+                num_heads,
+                head_dim,
+                context_dim,
+                rope_type,
+            ))
         } else {
             None
         };
 
-        Self { adaln, self_attn, cross_attn, norm1, norm_cross, norm2, ff, audio }
+        Self {
+            adaln,
+            self_attn,
+            cross_attn,
+            norm1,
+            norm_cross,
+            norm2,
+            ff,
+            audio,
+        }
     }
 
     pub fn forward(
@@ -260,10 +301,14 @@ impl BasicAVTransformerBlock {
         let (modulation, _) = self.adaln.forward(timestep, x.kind());
         let chunks: Vec<Tensor> = modulation.chunk(6, -1);
         let (shift_msa, scale_msa, gate_msa) = (
-            chunks[0].unsqueeze(1), chunks[1].unsqueeze(1), chunks[2].unsqueeze(1),
+            chunks[0].unsqueeze(1),
+            chunks[1].unsqueeze(1),
+            chunks[2].unsqueeze(1),
         );
         let (shift_mlp, scale_mlp, gate_mlp) = (
-            chunks[3].unsqueeze(1), chunks[4].unsqueeze(1), chunks[5].unsqueeze(1),
+            chunks[3].unsqueeze(1),
+            chunks[4].unsqueeze(1),
+            chunks[5].unsqueeze(1),
         );
 
         let h = self.norm1.forward(x) * (Tensor::ones_like(&scale_msa) + &scale_msa) + &shift_msa;

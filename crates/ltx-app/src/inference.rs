@@ -34,7 +34,11 @@ fn run_inference(
         DeviceKind::Cuda | DeviceKind::Rocm => Device::Cuda(0),
     };
 
-    let _ = event_tx.send(GuiEvent::Progress { step: 0, total: params.steps, sigma: 0.0 });
+    let _ = event_tx.send(GuiEvent::Progress {
+        step: 0,
+        total: params.steps,
+        sigma: 0.0,
+    });
 
     // Build model
     let vs = tch::nn::VarStore::new(device);
@@ -60,7 +64,11 @@ fn run_inference(
 
     // Load weights
     if let Some(ref path) = params.weights_path {
-        let _ = event_tx.send(GuiEvent::Progress { step: 0, total: params.steps, sigma: 0.0 });
+        let _ = event_tx.send(GuiEvent::Progress {
+            step: 0,
+            total: params.steps,
+            sigma: 0.0,
+        });
         load_weights(&vs, path)?;
     }
 
@@ -72,15 +80,25 @@ fn run_inference(
     );
 
     // Text context
-    let context = if let (Some(tok_path), Some(tw_path)) = (&params.tokenizer_path, &params.text_weights_path) {
+    let context = if let (Some(tok_path), Some(tw_path)) =
+        (&params.tokenizer_path, &params.text_weights_path)
+    {
         let config = ltx_text_encoder::configurator::default_config();
         let encoder_vs = tch::nn::VarStore::new(Device::Cpu);
-        let encoder = ltx_text_encoder::configurator::from_config(&encoder_vs.root(), &config, tok_path.to_str().unwrap_or(""))
-            .map_err(|e| format!("text encoder init: {e}"))?;
+        let encoder = ltx_text_encoder::configurator::from_config(
+            &encoder_vs.root(),
+            &config,
+            tok_path.to_str().unwrap_or(""),
+        )
+        .map_err(|e| format!("text encoder init: {e}"))?;
         load_weights(&encoder_vs, tw_path)?;
         let encoded = encoder.encode(&params.prompt);
         let seq_len = encoded.size()[1];
-        let _ = event_tx.send(GuiEvent::Progress { step: 0, total: params.steps, sigma: 0.0 });
+        let _ = event_tx.send(GuiEvent::Progress {
+            step: 0,
+            total: params.steps,
+            sigma: 0.0,
+        });
         eprintln!("encoded prompt: [1, {seq_len}, {}]", encoded.size()[2]);
         encoded
     } else {
@@ -125,7 +143,15 @@ fn run_inference(
 
         let guided = guider.guide(&cond_pred, &uncond_pred);
         let denoised = unpatchify_5d(
-            &guided, b, c, params.frames, params.height, params.width, p1, p2, p3,
+            &guided,
+            b,
+            c,
+            params.frames,
+            params.height,
+            params.width,
+            p1,
+            p2,
+            p3,
         );
         x = step.step(&x, sigma, next_sigma, &denoised, Kind::Float);
 

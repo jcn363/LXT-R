@@ -45,11 +45,7 @@ pub fn build_downsampling_path<'a>(
         let in_ch = if i == 0 { channels[0] } else { channels[i - 1] };
         let out_ch = channels[i];
 
-        let resblock = ResnetBlock2D::new(
-            vs / format!("resblock_{i}"),
-            in_ch,
-            out_ch,
-        );
+        let resblock = ResnetBlock2D::new(vs / format!("resblock_{i}"), in_ch, out_ch);
 
         let conv = if i < num_stages - 1 {
             Some(CausalConv2d::new_with_axes(
@@ -98,10 +94,7 @@ mod tests {
         let vs = tch::nn::VarStore::new(tch::Device::Cpu);
         let root = vs.root();
         let channels = [64, 128, 256];
-        let stages = build_downsampling_path(
-            root / "down",
-            &channels,
-        );
+        let stages = build_downsampling_path(root / "down", &channels);
         assert_eq!(stages.len(), 3);
 
         let x = Tensor::randn([1, 64, 64, 128], (tch::Kind::Float, tch::Device::Cpu));

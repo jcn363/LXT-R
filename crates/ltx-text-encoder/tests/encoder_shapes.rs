@@ -1,5 +1,5 @@
-use ltx_text_encoder::gemma3_text::Gemma3TextModel;
 use ltx_text_encoder::config::Gemma3ConfigData;
+use ltx_text_encoder::gemma3_text::Gemma3TextModel;
 use tch::{Device, Kind, Tensor};
 
 fn small_config() -> Gemma3ConfigData {
@@ -46,7 +46,10 @@ fn test_gemma3_text_model_varies_with_input() {
 
     // Different inputs should produce different outputs
     let diff = (&out_a - &out_b).abs().sum(Kind::Float).double_value(&[]);
-    assert!(diff > 0.0, "different inputs should produce different outputs");
+    assert!(
+        diff > 0.0,
+        "different inputs should produce different outputs"
+    );
 }
 
 #[test]

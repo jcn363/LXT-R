@@ -29,11 +29,7 @@ impl std::fmt::Debug for ResnetBlock2D {
 }
 
 impl ResnetBlock2D {
-    pub fn new<'a>(
-        vs: impl Borrow<Path<'a>>,
-        in_channels: i64,
-        out_channels: i64,
-    ) -> Self {
+    pub fn new<'a>(vs: impl Borrow<Path<'a>>, in_channels: i64, out_channels: i64) -> Self {
         let vs = vs.borrow();
 
         let conv1 = CausalConv2d::new(

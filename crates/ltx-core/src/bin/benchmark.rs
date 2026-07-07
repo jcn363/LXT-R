@@ -26,10 +26,12 @@ use std::time::Instant;
 
 use clap::Parser;
 use ltx_attention::RopeType;
-use ltx_components::{EulerStep, Res2sStep, Ltx2Scheduler, CFG, APG, STG};
+use ltx_components::{EulerStep, Ltx2Scheduler, Res2sStep, APG, CFG, STG};
 use ltx_norm::RMSNorm;
 use ltx_patchify::{patchify_5d, unpatchify_5d};
-use ltx_quantization::{quantize_to_int8_per_tensor, dequantize_int8, int4_mm::quantize_weight_to_int4_per_group};
+use ltx_quantization::{
+    dequantize_int8, int4_mm::quantize_weight_to_int4_per_group, quantize_to_int8_per_tensor,
+};
 use ltx_transformer::block::BasicAVTransformerBlock;
 use ltx_transformer::model::LTXModel;
 use ltx_types::{Guider, Scheduler};
@@ -87,9 +89,13 @@ struct Args {
 fn parse_device(s: &str) -> Device {
     match s {
         "auto" => {
-            if tch::Cuda::is_available() { Device::Cuda(0) }
-            else if cfg!(target_os = "macos") && tch::utils::has_mps() { Device::Mps }
-            else { Device::Cpu }
+            if tch::Cuda::is_available() {
+                Device::Cuda(0)
+            } else if cfg!(target_os = "macos") && tch::utils::has_mps() {
+                Device::Mps
+            } else {
+                Device::Cpu
+            }
         }
         "cpu" => Device::Cpu,
         s if s.starts_with("cuda:") => {
@@ -129,7 +135,11 @@ fn build_model(vs: &tch::nn::Path, dim: i64, patch_dim: i64, num_layers: i64) ->
     for i in 0..num_layers {
         blocks.push(BasicAVTransformerBlock::new(
             &(vs / "blocks" / i),
-            dim, 4, dim / 4, None, RopeType::Interleaved,
+            dim,
+            4,
+            dim / 4,
+            None,
+            RopeType::Interleaved,
         ));
     }
     let norm_out = RMSNorm::default_eps_with_path(vs / "norm_out", dim);
@@ -173,7 +183,10 @@ fn load_weights(vs: &tch::nn::VarStore, path: &str) -> u32 {
 enum QuantState {
     None,
     Int8(Vec<(String, Tensor, Tensor)>),
-    Int4(Vec<(String, Tensor, Tensor)>, std::collections::HashMap<String, Vec<i64>>),
+    Int4(
+        Vec<(String, Tensor, Tensor)>,
+        std::collections::HashMap<String, Vec<i64>>,
+    ),
 }
 
 /// Benchmark a full denoising loop.
@@ -196,7 +209,10 @@ fn bench_denoising_loop(
     let scheduler = Ltx2Scheduler::default();
     let sigmas = scheduler.sigmas(steps);
     let mut x = Tensor::randn([1, 4, frames, height, width], (Kind::Float, device));
-    let uncond = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
+    let uncond = Tensor::zeros(
+        [1, context.size()[1], context.size()[2]],
+        (Kind::Float, device),
+    );
 
     let t0 = Instant::now();
     for i in 0..steps {
@@ -205,7 +221,9 @@ fn bench_denoising_loop(
         let patched = patchify_5d(&x, p1, p2, p3);
         let projected = if let Some(proj) = patchify_proj {
             proj.forward_t(&patched, false)
-        } else { patched };
+        } else {
+            patched
+        };
         let ts = Tensor::from_slice(&[sigma as f32]).to_device(device);
 
         // For quantized inference: swap dequantized weights, run forward, swap back
@@ -268,7 +286,11 @@ fn quantize_vs_int4(vs: &tch::nn::VarStore) -> Vec<(String, Tensor, Tensor)> {
             quantized.push((name.clone(), packed, scales));
         } else if tensor.kind() == Kind::Float {
             // Scalars/small tensors: keep as FP32
-            quantized.push((name.clone(), tensor.shallow_clone(), Tensor::zeros([], (Kind::Float, tch::Device::Cpu))));
+            quantized.push((
+                name.clone(),
+                tensor.shallow_clone(),
+                Tensor::zeros([], (Kind::Float, tch::Device::Cpu)),
+            ));
         }
     }
     quantized
@@ -283,9 +305,12 @@ fn with_int8_weights<F: FnOnce() -> R, R>(
 ) -> R {
     let originals: Vec<(String, Tensor)> = {
         let vars = vs.variables();
-        quantized.iter().filter_map(|(name, _q, _scale)| {
-            vars.get(name).map(|t| (name.clone(), t.shallow_clone()))
-        }).collect()
+        quantized
+            .iter()
+            .filter_map(|(name, _q, _scale)| {
+                vars.get(name).map(|t| (name.clone(), t.shallow_clone()))
+            })
+            .collect()
     };
     // Swap in dequantized weights
     {
@@ -320,9 +345,12 @@ fn with_int4_weights<F: FnOnce() -> R, R>(
 ) -> R {
     let originals: Vec<(String, Tensor)> = {
         let vars = vs.variables();
-        quantized.iter().filter_map(|(name, _packed, _scales)| {
-            vars.get(name).map(|t| (name.clone(), t.shallow_clone()))
-        }).collect()
+        quantized
+            .iter()
+            .filter_map(|(name, _packed, _scales)| {
+                vars.get(name).map(|t| (name.clone(), t.shallow_clone()))
+            })
+            .collect()
     };
     // Swap in dequantized INT4 weights
     {
@@ -342,11 +370,15 @@ fn with_int4_weights<F: FnOnce() -> R, R>(
                 // Unpack INT4
                 let low = packed.bitwise_and(0x0F).to_kind(Kind::Float);
                 let shift_amt = Tensor::from_slice(&[4i64]).to_kind(Kind::Int8);
-                let high = packed.bitwise_right_shift(&shift_amt).bitwise_and(0x0F).to_kind(Kind::Float);
-                let unpacked = Tensor::stack(&[&low, &high], 2)
-                    .reshape([out_features, in_features]);
+                let high = packed
+                    .bitwise_right_shift(&shift_amt)
+                    .bitwise_and(0x0F)
+                    .to_kind(Kind::Float);
+                let unpacked =
+                    Tensor::stack(&[&low, &high], 2).reshape([out_features, in_features]);
                 // Dequantize
-                let scales_expanded = scales.unsqueeze(2)
+                let scales_expanded = scales
+                    .unsqueeze(2)
                     .expand([out_features, num_groups, group_size], true)
                     .reshape([out_features, in_features]);
                 let dq = (unpacked * scales_expanded).to_device(device);
@@ -383,7 +415,12 @@ fn main() {
     eprintln!("Building model on {device:?}...");
     let vs = tch::nn::VarStore::new(device);
     let patchify_proj = if !use_random {
-        Some(tch::nn::linear(vs.root() / "patchify_proj", patch_dim, dim, Default::default()))
+        Some(tch::nn::linear(
+            vs.root() / "patchify_proj",
+            patch_dim,
+            dim,
+            Default::default(),
+        ))
     } else {
         None
     };
@@ -405,51 +442,83 @@ fn main() {
     let int8_quantized: Vec<(String, Tensor, Tensor)> = if args.dtype == "int8" {
         eprintln!("Quantizing weights to INT8 (per-tensor symmetric)...");
         quantize_vs_int8(&vs)
-    } else { Vec::new() };
+    } else {
+        Vec::new()
+    };
 
     let int4_quantized: Vec<(String, Tensor, Tensor)> = if args.dtype == "int4" {
         eprintln!("Quantizing weights to INT4 (per-group, group_size=128)...");
         quantize_vs_int4(&vs)
-    } else { Vec::new() };
+    } else {
+        Vec::new()
+    };
 
     let n_params: usize = vs.variables().values().map(|t| t.numel()).sum();
     let weight_bytes_fp32: usize = vs.variables().values().map(|t| t.numel() * 4).sum();
     let weight_bytes_actual = if args.dtype == "int8" {
-        int8_quantized.iter().map(|(_, q, s)| q.numel() + s.numel()).sum::<usize>()
+        int8_quantized
+            .iter()
+            .map(|(_, q, s)| q.numel() + s.numel())
+            .sum::<usize>()
     } else if args.dtype == "int4" {
-        int4_quantized.iter().map(|(_, p, s)| {
-            if s.size().is_empty() && s.double_value(&[]) == 0.0 { p.numel() * 4 }
-            else { p.numel() + s.numel() }
-        }).sum::<usize>()
+        int4_quantized
+            .iter()
+            .map(|(_, p, s)| {
+                if s.size().is_empty() && s.double_value(&[]) == 0.0 {
+                    p.numel() * 4
+                } else {
+                    p.numel() + s.numel()
+                }
+            })
+            .sum::<usize>()
     } else {
-        vs.variables().values().map(|t| {
-            let es = match t.kind() {
-                Kind::Float | Kind::Int => 4,
-                Kind::Half | Kind::BFloat16 | Kind::Int16 => 2,
-                _ => 4,
-            };
-            t.numel() * es
-        }).sum()
+        vs.variables()
+            .values()
+            .map(|t| {
+                let es = match t.kind() {
+                    Kind::Float | Kind::Int => 4,
+                    Kind::Half | Kind::BFloat16 | Kind::Int16 => 2,
+                    _ => 4,
+                };
+                t.numel() * es
+            })
+            .sum()
     };
     let compression = weight_bytes_fp32 as f64 / weight_bytes_actual.max(1) as f64;
-    eprintln!("Model: {dim}d, {num_layers} layers, {:.1}M params", n_params as f64 / 1e6);
+    eprintln!(
+        "Model: {dim}d, {num_layers} layers, {:.1}M params",
+        n_params as f64 / 1e6
+    );
     eprintln!("  FP32 weights: {:.1} MB", weight_bytes_fp32 as f64 / 1e6);
-    eprintln!("  {} weights: {:.1} MB ({:.1}x compression)",
-        args.dtype.to_uppercase(), weight_bytes_actual as f64 / 1e6, compression);
+    eprintln!(
+        "  {} weights: {:.1} MB ({:.1}x compression)",
+        args.dtype.to_uppercase(),
+        weight_bytes_actual as f64 / 1e6,
+        compression
+    );
 
     // Save INT4 shapes for dequantization
     let int4_shapes: std::collections::HashMap<String, Vec<i64>> = if args.dtype == "int4" {
         let vars = vs.variables();
-        int4_quantized.iter().filter_map(|(name, _, _)| {
-            vars.get(name).map(|t| (name.clone(), t.size()))
-        }).collect()
-    } else { std::collections::HashMap::new() };
+        int4_quantized
+            .iter()
+            .filter_map(|(name, _, _)| vars.get(name).map(|t| (name.clone(), t.size())))
+            .collect()
+    } else {
+        std::collections::HashMap::new()
+    };
 
     let model = build_model(&vs.root(), dim, patch_dim, num_layers);
     let context = Tensor::randn([1, 4, dim], (Kind::Float, device));
 
     eprintln!("\n=== Benchmark Configuration ===");
-    eprintln!("Resolution: {}x{} latent ({}x{} pixels)", args.width, args.height, args.width * 32, args.height * 32);
+    eprintln!(
+        "Resolution: {}x{} latent ({}x{} pixels)",
+        args.width,
+        args.height,
+        args.width * 32,
+        args.height * 32
+    );
     eprintln!("Frames: {}, Steps: {}", args.frames, args.steps);
     eprintln!("Warmup: {}, Iterations: {}", args.warmup, args.iterations);
     eprintln!("Dtype: {}", args.dtype);
@@ -464,8 +533,14 @@ fn main() {
         for method_name in &["euler", "res2s"] {
             let mut times = Vec::new();
             for _ in 0..args.warmup + args.iterations {
-                let mut x = Tensor::randn([1, c, args.frames, args.height, args.width], (Kind::Float, device));
-                let uncond = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
+                let mut x = Tensor::randn(
+                    [1, c, args.frames, args.height, args.width],
+                    (Kind::Float, device),
+                );
+                let uncond = Tensor::zeros(
+                    [1, context.size()[1], context.size()[2]],
+                    (Kind::Float, device),
+                );
                 let scheduler = Ltx2Scheduler::default();
                 let sigmas = scheduler.sigmas(args.steps);
 
@@ -476,14 +551,28 @@ fn main() {
                     let patched = patchify_5d(&x, p1, p2, p3);
                     let projected = if let Some(ref proj) = patchify_proj {
                         proj.forward_t(&patched, false)
-                    } else { patched };
+                    } else {
+                        patched
+                    };
                     let ts = Tensor::from_slice(&[sigma as f32]).to_device(device);
                     let cond = model.forward(&projected, &ts, &context, None, None);
                     let uncond_pred = model.forward(&projected, &ts, &uncond, None, None);
                     let guided = CFG::new(7.5).guide(&cond, &uncond_pred);
-                    let denoised = unpatchify_5d(&guided, b, c, args.frames, args.height, args.width, p1, p2, p3);
+                    let denoised = unpatchify_5d(
+                        &guided,
+                        b,
+                        c,
+                        args.frames,
+                        args.height,
+                        args.width,
+                        p1,
+                        p2,
+                        p3,
+                    );
                     x = match *method_name {
-                        "res2s" => Res2sStep::new(1.0).step(&x, sigma, next_sigma, &denoised, Kind::Float),
+                        "res2s" => {
+                            Res2sStep::new(1.0).step(&x, sigma, next_sigma, &denoised, Kind::Float)
+                        }
                         _ => EulerStep::new().step(&x, sigma, next_sigma, &denoised, Kind::Float),
                     };
                 }
@@ -501,8 +590,14 @@ fn main() {
         for (guider_name, scale) in &[("cfg", 7.5), ("apg", 7.5), ("stg", 7.5)] {
             let mut times = Vec::new();
             for _ in 0..args.warmup + args.iterations {
-                let mut x = Tensor::randn([1, c, args.frames, args.height, args.width], (Kind::Float, device));
-                let uncond = Tensor::zeros([1, context.size()[1], context.size()[2]], (Kind::Float, device));
+                let mut x = Tensor::randn(
+                    [1, c, args.frames, args.height, args.width],
+                    (Kind::Float, device),
+                );
+                let uncond = Tensor::zeros(
+                    [1, context.size()[1], context.size()[2]],
+                    (Kind::Float, device),
+                );
                 let scheduler = Ltx2Scheduler::default();
                 let sigmas = scheduler.sigmas(args.steps);
 
@@ -513,7 +608,9 @@ fn main() {
                     let patched = patchify_5d(&x, p1, p2, p3);
                     let projected = if let Some(ref proj) = patchify_proj {
                         proj.forward_t(&patched, false)
-                    } else { patched };
+                    } else {
+                        patched
+                    };
                     let ts = Tensor::from_slice(&[sigma as f32]).to_device(device);
                     let cond = model.forward(&projected, &ts, &context, None, None);
                     let uncond_pred = model.forward(&projected, &ts, &uncond, None, None);
@@ -522,7 +619,17 @@ fn main() {
                         "stg" => STG::new(*scale, 3.0).guide(&cond, &uncond_pred),
                         _ => CFG::new(*scale).guide(&cond, &uncond_pred),
                     };
-                    let denoised = unpatchify_5d(&guided, b, c, args.frames, args.height, args.width, p1, p2, p3);
+                    let denoised = unpatchify_5d(
+                        &guided,
+                        b,
+                        c,
+                        args.frames,
+                        args.height,
+                        args.width,
+                        p1,
+                        p2,
+                        p3,
+                    );
                     x = EulerStep::new().step(&x, sigmas[i], sigmas[i + 1], &denoised, Kind::Float);
                 }
                 times.push(t0.elapsed().as_secs_f64());
@@ -545,13 +652,26 @@ fn main() {
         let mut times = Vec::new();
         for iter in 0..args.warmup + args.iterations {
             let (elapsed, fps) = bench_denoising_loop(
-                &model, &vs, &context, args.height, args.width, args.frames,
-                args.steps, device, p1, p2, p3, patchify_proj.as_ref(),
+                &model,
+                &vs,
+                &context,
+                args.height,
+                args.width,
+                args.frames,
+                args.steps,
+                device,
+                p1,
+                p2,
+                p3,
+                patchify_proj.as_ref(),
                 &quant_state,
             );
             if iter >= args.warmup {
                 times.push(elapsed);
-                eprintln!("  iter {}: {elapsed:.3}s ({fps:.1} frames/sec)", iter - args.warmup);
+                eprintln!(
+                    "  iter {}: {elapsed:.3}s ({fps:.1} frames/sec)",
+                    iter - args.warmup
+                );
             }
         }
 
@@ -568,16 +688,25 @@ fn main() {
     }
 
     // Memory estimate — model weights
-    let total_bytes: usize = vs.variables().values().map(|t| {
-        let elem_size = match t.kind() {
-            Kind::Float | Kind::Int => 4,
-            Kind::Half | Kind::BFloat16 | Kind::Int16 => 2,
-            Kind::Double => 8,
-            Kind::Uint8 | Kind::Int8 | Kind::QInt8 | Kind::QUInt8 | Kind::QInt32 | Kind::Bool => 1,
-            _ => 4,
-        };
-        t.numel() * elem_size
-    }).sum();
+    let total_bytes: usize = vs
+        .variables()
+        .values()
+        .map(|t| {
+            let elem_size = match t.kind() {
+                Kind::Float | Kind::Int => 4,
+                Kind::Half | Kind::BFloat16 | Kind::Int16 => 2,
+                Kind::Double => 8,
+                Kind::Uint8
+                | Kind::Int8
+                | Kind::QInt8
+                | Kind::QUInt8
+                | Kind::QInt32
+                | Kind::Bool => 1,
+                _ => 4,
+            };
+            t.numel() * elem_size
+        })
+        .sum();
     eprintln!();
     eprintln!("=== Memory ===");
     eprintln!("  model weights: {:.1} MB", total_bytes as f64 / 1e6);
@@ -587,7 +716,10 @@ fn main() {
         eprintln!("  device: {device:?} (GPU inference)");
         // Try nvidia-smi first (CUDA), then rocm-smi (ROCm)
         let vram_used = std::process::Command::new("nvidia-smi")
-            .args(["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"])
+            .args([
+                "--query-gpu=memory.used,memory.total",
+                "--format=csv,noheader,nounits",
+            ])
             .output()
             .ok()
             .and_then(|o| String::from_utf8(o.stdout).ok())
@@ -608,8 +740,12 @@ fn main() {
                                 let used: f64 = vals[1].trim().parse().unwrap_or(0.0);
                                 let total: f64 = vals[2].trim().parse().unwrap_or(0.0);
                                 Some(format!("{:.0}, {:.0}", used / 1e6, total / 1e6))
-                            } else { None }
-                        } else { None }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
                     })
             });
         if let Some(vram) = vram_used {
@@ -626,33 +762,40 @@ fn main() {
         let real_dim: usize = 2048;
         let real_layers: usize = 28;
         // Per layer: attention Q/K/V/O (4*dim^2) + FFN (8*dim^2) + adaLN (6*dim) + norms (3*dim)
-        let per_layer_params: usize = 4 * real_dim * real_dim
-            + 8 * real_dim * real_dim
-            + 6 * real_dim
-            + 3 * real_dim;
+        let per_layer_params: usize =
+            4 * real_dim * real_dim + 8 * real_dim * real_dim + 6 * real_dim + 3 * real_dim;
         let proj_out_params = real_dim * 128; // dim * patch_dim
         let total_params = real_layers * per_layer_params + proj_out_params;
         // Activation memory: 2 forward passes, 11*dim per token per layer
         let seq_len = ((args.frames / 2) * (args.height / 4) * (args.width / 4)) as usize;
         let per_layer_act = seq_len * 11 * real_dim * 4; // FP32 activations
-        let total_act = per_layer_act * real_layers * 2 + 4 * (args.frames as usize)
-            * (args.height as usize) * (args.width as usize) * 4;
+        let total_act = per_layer_act * real_layers * 2
+            + 4 * (args.frames as usize) * (args.height as usize) * (args.width as usize) * 4;
 
         let vram_total: f64 = 2048.0;
         eprintln!();
         eprintln!("  Real 28L model VRAM estimate ({total_params:.0} params):");
-        eprintln!("  {:<8} {:>10} {:>14} {:>14} {:>6}", "Dtype", "Weights", "Activations", "Total VRAM", "Fits?");
-        eprintln!("  {:<8} {:>10} {:>14} {:>14} {:>6}", "-----", "-------", "-----------", "----------", "----");
-        for (name, bytes_per_param) in &[("FP32", 4.0), ("FP16", 2.0), ("INT8", 1.0), ("INT4", 0.5)] {
+        eprintln!(
+            "  {:<8} {:>10} {:>14} {:>14} {:>6}",
+            "Dtype", "Weights", "Activations", "Total VRAM", "Fits?"
+        );
+        eprintln!(
+            "  {:<8} {:>10} {:>14} {:>14} {:>6}",
+            "-----", "-------", "-----------", "----------", "----"
+        );
+        for (name, bytes_per_param) in &[("FP32", 4.0), ("FP16", 2.0), ("INT8", 1.0), ("INT4", 0.5)]
+        {
             let weight_bytes = (total_params as f64 * bytes_per_param) as usize;
             let total_vram = weight_bytes + total_act;
             let fits = (total_vram as f64) < vram_total * 1e6;
-            eprintln!("  {:<8} {:>9.0} MB {:>13.1} MB {:>13.0} MB {:>6}",
+            eprintln!(
+                "  {:<8} {:>9.0} MB {:>13.1} MB {:>13.0} MB {:>6}",
                 name,
                 weight_bytes as f64 / 1e6,
                 total_act as f64 / 1e6,
                 total_vram as f64 / 1e6,
-                if fits { "YES" } else { "NO" });
+                if fits { "YES" } else { "NO" }
+            );
         }
     } else {
         eprintln!("  device: CPU");

@@ -1285,11 +1285,11 @@ Each shared primitive gets tested once, then reused. Tests live in each crate's 
 | **P7** | `ltx-text-encoder` (Gemma3 + SigLIP) | 13 | ~2,500 | ✅ Complete |
 | **P8** | `ltx-upsampler` | 5 | ~500 | ✅ Complete |
 | **P9** | `ltx-core` + integration | 2 | ~500 | ✅ Complete |
-| **P10** | Benchmarking + optimization | 178 | ~16,600 | ✅ Complete |
+| **P10** | Benchmarking + optimization | 180 | ~18,200 | ✅ Complete |
 | **Total (plan estimate)** | | **~77** | **~16,500** | |
-| **Total (actual)** | | **178** | **~16,600** | **P0–P10 ✅** |
+| **Total (actual)** | | **180** | **~18,200** | **P0–P10 ✅** |
 
-**Actual breakdown**: 122 source files (~12,500 LOC) + 55 test files (~4,100 LOC) + 1 bench file = 178 files, ~16,600 total LOC across 21 crates (including `ltx-test-utils` and `ltx-app`).
+**Actual breakdown**: 124 source files (~14,100 LOC) + 55 test files (~4,100 LOC) + 1 bench file = 180 files, ~18,200 total LOC across 22 crates (including `ltx-test-utils` and `ltx-app`).
 
 **DRY approach (plan estimate)** reduced total LOC by ~28% vs non-DRY (16,500 → 11,700) and eliminated 10+ duplicated implementations across transformer, VAE, text encoder, and upsampler crates. The original plan estimated ~16,500 LOC and 23 weeks; the actual implementation was ~11,700 LOC (including comprehensive test coverage) and substantially faster due to the shared-primitive architecture.
 
