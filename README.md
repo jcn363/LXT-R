@@ -368,8 +368,6 @@ crates/
 ### P10: Benchmarking + Optimization
 - Profile denoising throughput (frames/sec at various resolutions)
 - Memory profiling on GPU
-- INT4 weight quantization for reduced VRAM usage
-- Multi-GPU model sharding (round-robin layer distribution)
 
 ### Completed in This Session
 - ✅ VAE decoder rewrite to match Python checkpoint (7 up_blocks, CompressAllUpsample, AdaLN)
@@ -383,7 +381,8 @@ crates/
 - ✅ Res2sStep alternative (second-order residual scaling)
 - ✅ APG/STG guiders (adaptive projected, spatio-temporal guidance)
 - ✅ Spatial tiling for memory-efficient generation
-- ✅ Model sharding CLI flag (parsed, ready for implementation)
+- ✅ INT4 weight quantization (per-group, `ltx-quantization::int4_mm`)
+- ✅ Multi-GPU model sharding (round-robin layer distribution via `--shard`)
 - ✅ PNG frame output alongside PGM/GIF
 - ✅ Comprehensive CLI with 30 flags
 
