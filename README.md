@@ -4,7 +4,7 @@ Rust rewrite of [LTX-2.3](https://github.com/LightricksResearch/LTX-Video) core 
 
 ## Architecture
 
-22 crates, ~15,200 LOC (121 source files + 55 test files). All model logic is pure Rust; external FFI (`tch`, CUDA) is isolated behind safe APIs.
+21 crates, ~16,600 LOC (122 source files + 55 test files + 1 bench file). All model logic is pure Rust; external FFI (`tch`, CUDA) is isolated behind safe APIs.
 
 ```
 ltx-core (facade)

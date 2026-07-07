@@ -44,7 +44,7 @@ impl PixelShuffleND {
         match self.num_spatial_dims {
             2 => self.forward_2d(x),
             3 => self.forward_3d(x),
-            _ => unreachable!(),
+            _ => panic!("PixelShuffleND only supports 2D and 3D tensors, got {}D", self.num_spatial_dims),
         }
     }
 

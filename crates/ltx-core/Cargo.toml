@@ -7,6 +7,10 @@ edition = "2021"
 name = "ltx-inference"
 path = "src/bin/inference.rs"
 
+[[bin]]
+name = "ltx-benchmark"
+path = "src/bin/benchmark.rs"
+
 [dependencies]
 ltx-types = { path = "../ltx-types" }
 ltx-norm = { path = "../ltx-norm" }

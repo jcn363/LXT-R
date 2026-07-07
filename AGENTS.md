@@ -69,14 +69,14 @@ cargo clippy --all-targets -- -D warnings -D clippy::all
 - Import from `ltx_*` crate root, never internal submodules (except explicit re-exports)
 - Each shared crate has a `factory.rs` — use it to instantiate modules, never construct directly
 - Tests go in each crate's `tests/` dir with golden `.safetensors` files for numerical comparison
-- 22 crates, 171 files, ~13,600 LOC (119 source + 52 test files), 480 tests
+- 21 crates, 178 files, ~16,600 LOC (122 source + 55 test + 1 bench files), 480 tests
 - Workspace root: `Cargo.toml` at repo root, all crates under `crates/`
 
 ## Gotchas
 
 - `ltx-fp8` has CUDA C FFI — requires CUDA toolchain
 - `ltx-loader` also has CUDA kernels for fused ops
-- `ltx-text-encoder` is the largest crate (12 files) — Gemma3 has 48 transformer layers, SigLIP has 27
+- `ltx-text-encoder` is the largest crate (13 source files) — Gemma3 has 48 transformer layers, SigLIP has 27
 - `ltx-patchify::ops` reimplements `einops.rearrange` patterns in pure Rust — do not add an einops dependency
 - RoPE has two variants (`Interleaved`, `Split`) — make sure you use the right one per model
 - `ltx-components` bundles 4 concerns (scheduler, guider, noiser, step) — split if any grows beyond ~200 LOC

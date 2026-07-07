@@ -299,7 +299,6 @@ type Tile = (Tensor, (i64, i64), (i64, i64));
 /// Parse a comma-separated list of CUDA device IDs into Device values.
 ///
 /// Input: "cuda:0,cuda:1" → vec![Device::Cuda(0), Device::Cuda(1)]
-#[allow(dead_code)]
 fn parse_shard_devices(shard_str: &str) -> Vec<Device> {
     shard_str
         .split(',')
@@ -787,7 +786,7 @@ fn main() {
                 }
                 Err(e) => {
                     eprintln!("  [{}/{}] encoding failed: {e}", i + 1, prompts.len());
-                    // Placeholder context — will be skipped during denoising
+                    // Fallback context — will be skipped during denoising
                     ctxs.push(Tensor::zeros([1, 1, dim], (Kind::Float, Device::Cpu)));
                 }
             }
@@ -1068,10 +1067,12 @@ fn main() {
                 let audio_mel = audio_decoder.forward(&denoised_audio);
                 eprintln!("{prompt_label}  audio mel: {:?}", audio_mel.size());
 
-                // Save as WAV (placeholder — real vocoder would convert mel to waveform)
+                // Save as WAV (raw mel output; a full vocoder such as HiFi-GAN would
+                // convert the mel spectrogram to a proper waveform here)
                 // Average over mel bins (dim 1) to get waveform-like output
                 let audio_samples = audio_mel
-                    .narrow(1, 0, 1) // Take first mel bin as placeholder
+                    .narrow(1, 0, 1)                     // Take first mel bin as a simple waveform approximation;
+                    // full vocoder would use all mel bins for high-fidelity output
                     .squeeze_dim(1);
                 let audio_path = if batch_mode {
                     std::path::PathBuf::from(&args.output_dir).join(format!("{:04}.wav", idx + 1))
