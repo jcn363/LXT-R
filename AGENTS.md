@@ -15,8 +15,8 @@ Every constant, type, function, and algorithm has exactly ONE definition. Violat
 ## Rust-Only Boundary
 
 All model logic is pure Rust. External FFI is isolated behind safe Rust APIs:
-- `tch` (PyTorch bindings) — tensor compute backend, used throughout
-- `ltx-fp8`, `ltx-loader` — contain CUDA C FFI, require CUDA toolchain
+- `tch` (PyTorch bindings) — tensor compute backend, used throughout; supports CUDA, ROCm, and MPS
+- `ltx-fp8`, `ltx-loader` — contain CUDA C FFI stubs, require CUDA/ROCm toolchain
 - `safetensors`, `sentencepiece` — Hugging Face crates for checkpoint loading and tokenization
 - Rule: Rust owns all algorithms; externals provide I/O and compute backends only
 
@@ -69,13 +69,13 @@ cargo clippy --all-targets -- -D warnings -D clippy::all
 - Import from `ltx_*` crate root, never internal submodules (except explicit re-exports)
 - Each shared crate has a `factory.rs` — use it to instantiate modules, never construct directly
 - Tests go in each crate's `tests/` dir with golden `.safetensors` files for numerical comparison
-- 21 crates, 178 files, ~16,600 LOC (122 source + 55 test + 1 bench files), 387 tests (all pass)
+- 21 crates, 178 files, ~16,600 LOC (122 source + 55 test + 1 bench files), 397 tests (all pass)
 - Workspace root: `Cargo.toml` at repo root, all crates under `crates/`
 
 ## Gotchas
 
-- `ltx-fp8` has CUDA C FFI — requires CUDA toolchain
-- `ltx-loader` also has CUDA kernels for fused ops
+- `ltx-fp8` has CUDA C FFI stubs — requires CUDA or ROCm toolchain
+- `ltx-loader` also has CUDA/ROCm kernel stubs for fused ops
 - `ltx-text-encoder` is the largest crate (13 source files) — Gemma3 has 48 transformer layers, SigLIP has 27
 - `ltx-patchify::ops` reimplements `einops.rearrange` patterns in pure Rust — do not add an einops dependency
 - RoPE has two variants (`Interleaved`, `Split`) — make sure you use the right one per model

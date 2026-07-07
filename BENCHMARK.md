@@ -2,6 +2,7 @@
 
 Benchmark date: 2026-07-07
 Binary: `ltx-benchmark` (release mode, libtorch 2.3.0+cu121)
+Supported backends: CUDA (NVIDIA), ROCm (AMD), MPS (Apple Metal), CPU
 
 ## Hardware
 

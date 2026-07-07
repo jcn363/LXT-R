@@ -34,12 +34,17 @@ impl SchedulerKind {
 pub enum DeviceKind {
     Cpu,
     Cuda,
+    Rocm,
 }
 
 impl DeviceKind {
     pub fn all_available() -> &'static [DeviceKind] {
         if tch::Cuda::is_available() {
-            &[DeviceKind::Cpu, DeviceKind::Cuda]
+            if is_rocm() {
+                &[DeviceKind::Cpu, DeviceKind::Rocm]
+            } else {
+                &[DeviceKind::Cpu, DeviceKind::Cuda]
+            }
         } else {
             &[DeviceKind::Cpu]
         }
@@ -51,8 +56,20 @@ impl DeviceKind {
             Self::Cuda => {
                 if tch::Cuda::is_available() { "CUDA ✓" } else { "CUDA (unavailable)" }
             }
+            Self::Rocm => {
+                if tch::Cuda::is_available() { "ROCm ✓" } else { "ROCm (unavailable)" }
+            }
         }
     }
+}
+
+/// Detect ROCm by probing for `rocm-smi`.
+fn is_rocm() -> bool {
+    std::process::Command::new("rocm-smi")
+        .arg("--showproductname")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 #[derive(Debug, Clone)]

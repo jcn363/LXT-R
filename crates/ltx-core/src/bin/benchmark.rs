@@ -97,6 +97,11 @@ fn parse_device(s: &str) -> Device {
             Device::Cuda(id)
         }
         "cuda" => Device::Cuda(0),
+        s if s.starts_with("rocm:") => {
+            let id: usize = s[5..].parse().unwrap_or(0);
+            Device::Cuda(id)
+        }
+        "rocm" => Device::Cuda(0),
         _ => Device::Cpu,
     }
 }
@@ -580,13 +585,33 @@ fn main() {
     // GPU VRAM tracking
     if device != Device::Cpu {
         eprintln!("  device: {device:?} (GPU inference)");
-        // Get VRAM from nvidia-smi
+        // Try nvidia-smi first (CUDA), then rocm-smi (ROCm)
         let vram_used = std::process::Command::new("nvidia-smi")
             .args(["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"])
             .output()
             .ok()
             .and_then(|o| String::from_utf8(o.stdout).ok())
-            .map(|s| s.trim().to_string());
+            .map(|s| s.trim().to_string())
+            .or_else(|| {
+                // ROCm: use rocm-smi for VRAM info
+                std::process::Command::new("rocm-smi")
+                    .args(["--showmeminfo", "vram", "--csv"])
+                    .output()
+                    .ok()
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .and_then(|csv| {
+                        // Parse CSV: "device,used,total" (values in bytes)
+                        let lines: Vec<&str> = csv.lines().collect();
+                        if lines.len() >= 2 {
+                            let vals: Vec<&str> = lines[1].split(',').collect();
+                            if vals.len() >= 3 {
+                                let used: f64 = vals[1].trim().parse().unwrap_or(0.0);
+                                let total: f64 = vals[2].trim().parse().unwrap_or(0.0);
+                                Some(format!("{:.0}, {:.0}", used / 1e6, total / 1e6))
+                            } else { None }
+                        } else { None }
+                    })
+            });
         if let Some(vram) = vram_used {
             let parts: Vec<&str> = vram.split(", ").collect();
             if parts.len() == 2 {

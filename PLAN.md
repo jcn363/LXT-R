@@ -9,7 +9,7 @@ Rewrite `ltx-core` (~10,500 Python LOC, 71 files) from scratch in Rust with **st
 2. **DRY:** ~3,700 LOC eliminated (~18% reduction) through shared primitives
 3. **Modularity:** 77 files across 20 crates with clear dependency hierarchy
 4. **Testability:** Each shared primitive tested once, reused everywhere
-5. **Rust-only core:** All model logic is pure Rust. External FFI (CUDA kernels, cuBLAS) is isolated in dedicated crates (`ltx-fp8`, `ltx-loader`) behind safe Rust APIs. Dependencies on `tch` (PyTorch bindings), `safetensors`, and `tokenizers` are intentional — they provide GPU tensor ops, checkpoint loading, and tokenization without reinventing them. The boundary is: Rust owns all algorithms; externals provide I/O and compute backends.
+5. **Rust-only core:** All model logic is pure Rust. External FFI (CUDA/ROCm kernels, cuBLAS) is isolated in dedicated crates (`ltx-fp8`, `ltx-loader`) behind safe Rust APIs. Dependencies on `tch` (PyTorch bindings), `safetensors`, and `tokenizers` are intentional — they provide GPU tensor ops (CUDA, ROCm, MPS), checkpoint loading, and tokenization without reinventing them. The boundary is: Rust owns all algorithms; externals provide I/O and compute backends.
 
 **Result:** ~16,500 Rust LOC, ~40% in shared primitives, 23-week timeline.
 
@@ -237,7 +237,7 @@ ltx-core-rs/
 │   │       ├── module_ops.rs               # ModuleOps
 │   │       ├── registry.rs                 # StateDictRegistry
 │   │       ├── builder.rs                  # SingleGPUModelBuilder
-│   │       └── kernels.rs                  # CUDA kernel stubs (FFI not yet linked)
+│   │       └── kernels.rs                  # CUDA/ROCm kernel stubs (FFI not yet linked)
 │   │
 │   ├── ltx-quantization/                   # Quantization policy
 │   │   └── src/
@@ -1266,7 +1266,7 @@ All depend on: ───────┘
 
 Each shared primitive gets tested once, then reused. Tests live in each crate's `tests/` directory — see `crates/*/tests/` for current coverage.
 
-- **Current**: Structural correctness (compilation, type checking) via `cargo test --workspace` (387 tests; all pass)
+- **Current**: Structural correctness (compilation, type checking) via `cargo test --workspace` (397 tests; all pass)
 - **Implemented**: Golden `.safetensors` comparison tests verified against reference output via `ltx_test_utils::load_golden`
 
 ---

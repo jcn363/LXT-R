@@ -93,10 +93,12 @@ struct Args {
     text_weights: Option<String>,
 
     /// Inference device. Options:
-    ///   auto    — detect best available (CUDA > MPS > CPU)
+    ///   auto    — detect best available (CUDA/ROCm > MPS > CPU)
     ///   cpu     — force CPU
     ///   cuda    — NVIDIA GPU 0 (falls back to CPU if unavailable)
     ///   cuda:N  — NVIDIA GPU N
+    ///   rocm    — AMD GPU 0 via ROCm (falls back to CPU if unavailable)
+    ///   rocm:N  — AMD GPU N
     ///   mps     — Apple Metal Performance Shaders (macOS only)
     ///
     /// When using GPU, transformer weights are loaded directly onto the device
@@ -227,7 +229,7 @@ struct Args {
     tile_overlap: i64,
 
     /// Model sharding: split transformer across multiple GPUs.
-    /// Format: "cuda:0,cuda:1" or "cuda:0,cuda:1,cuda:2".
+    /// Format: "cuda:0,cuda:1" or "rocm:0,rocm:1".
     /// When specified, transformer layers are distributed round-robin across devices.
     #[arg(long)]
     shard: Option<String>,
@@ -242,6 +244,11 @@ fn parse_device(s: &str) -> Device {
             let id: usize = s["cuda:".len()..].parse().unwrap_or(0);
             pick_cuda(id)
         }
+        "rocm" => pick_rocm(0),
+        s if s.starts_with("rocm:") => {
+            let id: usize = s["rocm:".len()..].parse().unwrap_or(0);
+            pick_rocm(id)
+        }
         "mps" => pick_mps(),
         other => {
             eprintln!("warning: unknown device '{other}', falling back to CPU");
@@ -250,10 +257,11 @@ fn parse_device(s: &str) -> Device {
     }
 }
 
-/// Probe backends in priority order: CUDA → MPS → CPU.
+/// Probe backends in priority order: CUDA/ROCm → MPS → CPU.
 fn detect_device() -> Device {
     if tch::Cuda::is_available() {
-        eprintln!("auto-detected: NVIDIA CUDA (gpu 0)");
+        let label = if is_rocm() { "AMD ROCm" } else { "NVIDIA CUDA" };
+        eprintln!("auto-detected: {label} (gpu 0)");
         return Device::Cuda(0);
     }
     if is_mps_available() {
@@ -286,6 +294,32 @@ fn pick_mps() -> Device {
     }
 }
 
+/// ROCm uses the same tch CUDA device API when libtorch is built with ROCm.
+/// We detect ROCm by checking for `rocm-smi` on the system.
+fn pick_rocm(id: usize) -> Device {
+    if !tch::Cuda::is_available() {
+        eprintln!("warning: ROCm/CUDA not available, falling back to CPU");
+        return Device::Cpu;
+    }
+    let n = tch::Cuda::device_count() as usize;
+    if id >= n {
+        eprintln!("warning: rocm:{id} requested but only {n} device(s) available, using gpu 0");
+        return Device::Cuda(0);
+    }
+    Device::Cuda(id)
+}
+
+/// Detect whether the available GPU is AMD ROCm rather than NVIDIA CUDA.
+/// ROCm builds of libtorch still expose the CUDA API, so we probe for
+/// `rocm-smi` to distinguish the two.
+fn is_rocm() -> bool {
+    std::process::Command::new("rocm-smi")
+        .arg("--showproductname")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 /// MPS is available when tch is built with the Metal backend on macOS.
 fn is_mps_available() -> bool {
     // On non-macOS builds the Device::Mps variant exists but is never available.
@@ -296,9 +330,9 @@ fn is_mps_available() -> bool {
 /// A spatial tile: (patch_tensor, y_range, x_range)
 type Tile = (Tensor, (i64, i64), (i64, i64));
 
-/// Parse a comma-separated list of CUDA device IDs into Device values.
+/// Parse a comma-separated list of CUDA/ROCm device IDs into Device values.
 ///
-/// Input: "cuda:0,cuda:1" → vec![Device::Cuda(0), Device::Cuda(1)]
+/// Input: "cuda:0,cuda:1" or "rocm:0,rocm:1" → vec![Device::Cuda(0), Device::Cuda(1)]
 fn parse_shard_devices(shard_str: &str) -> Vec<Device> {
     shard_str
         .split(',')
@@ -308,6 +342,11 @@ fn parse_shard_devices(shard_str: &str) -> Vec<Device> {
                 let id: usize = id_str.parse().unwrap_or(0);
                 Device::Cuda(id)
             } else if s == "cuda" {
+                Device::Cuda(0)
+            } else if let Some(id_str) = s.strip_prefix("rocm:") {
+                let id: usize = id_str.parse().unwrap_or(0);
+                Device::Cuda(id)
+            } else if s == "rocm" {
                 Device::Cuda(0)
             } else {
                 Device::Cpu

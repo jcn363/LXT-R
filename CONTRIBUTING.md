@@ -3,7 +3,7 @@
 ## Development Setup
 
 1. Install Rust: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-2. Install CUDA toolkit (for FP8/loader FFI)
+2. Install GPU toolkit (for FP8/loader FFI): CUDA 12.1+ for NVIDIA, or ROCm 6.0+ for AMD
 3. Clone and build: `git clone https://github.com/LightricksResearch/LTX-R.git && cd LTX-R && cargo build`
 
 ## Code Style

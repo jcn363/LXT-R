@@ -4,7 +4,7 @@ Rust rewrite of [LTX-2.3](https://github.com/LightricksResearch/LTX-Video) core 
 
 ## Architecture
 
-21 crates, ~16,600 LOC (122 source files + 55 test files + 1 bench file). All model logic is pure Rust; external FFI (`tch`, CUDA) is isolated behind safe APIs.
+21 crates, ~16,600 LOC (122 source files + 55 test files + 1 bench file). All model logic is pure Rust; external FFI (`tch`, CUDA/ROCm) is isolated behind safe APIs.
 
 ```
 ltx-core (facade)
@@ -62,7 +62,7 @@ cargo run --release --bin ltx-inference -- \
   --prompt "a sunset over mountains" \
   --steps 20
 
-# GPU inference (auto-detects CUDA/MPS)
+# GPU inference (auto-detects CUDA/ROCm/MPS)
 cargo run --release --bin ltx-inference -- \
   --weights weights/ltx-video-2b-v0.9.1-rust.safetensors \
   --device auto \
@@ -139,7 +139,7 @@ cargo run --release --bin ltx-inference -- \
 | `--stg-temporal-scale` | `3.0` | STG temporal scale (with `--guider stg`) |
 | `--tile-size` | `0` | Spatial tile size in latent pixels (0=disabled) |
 | `--tile-overlap` | `4` | Tiling overlap in latent pixels |
-| `--shard` | none | Multi-GPU model sharding (e.g., `cuda:0,cuda:1`) |
+| `--shard` | none | Multi-GPU model sharding (e.g., `cuda:0,cuda:1` or `rocm:0,rocm:1`) |
 
 ## GPU Inference
 
@@ -150,12 +150,15 @@ The transformer runs directly on GPU for maximum denoising throughput. Text enco
 | Backend | `--device` value | Status | Requirements |
 |---------|------------------|--------|--------------|
 | NVIDIA CUDA | `cuda` / `cuda:N` | **Fully supported** | CUDA 12.1+ toolkit, NVIDIA GPU |
+| AMD ROCm | `rocm` / `rocm:N` | **Fully supported** | ROCm 6.0+ toolkit, AMD GPU |
 | Apple Metal (MPS) | `mps` | **Fully supported** | macOS 13+, Apple Silicon or AMD GPU |
 | CPU fallback | `cpu` | Always available | — |
 
+ROCm uses the same tch CUDA device API when libtorch is built with ROCm. The runtime detects ROCm via `rocm-smi` and labels it accordingly.
+
 ### Auto-Detection (`--device auto`)
 
-Probes backends in priority order: CUDA → MPS → CPU. The chosen backend is printed at startup.
+Probes backends in priority order: CUDA/ROCm → MPS → CPU. The chosen backend is printed at startup.
 
 ### GPU Requirements
 
@@ -175,6 +178,17 @@ wget https://download.pytorch.org/libtorch/cu121/libtorch-cxx11-abi-shared-with-
 unzip libtorch-cxx11-abi-shared-with-deps-2.3.0+cu121.zip -d /opt/libtorch
 export LIBTORCH=/opt/libtorch
 export LD_LIBRARY_PATH=/opt/libtorch/lib:$LD_LIBRARY_PATH
+```
+
+### ROCm Setup
+
+```bash
+# Download ROCm 6.0 libtorch
+wget https://download.pytorch.org/libtorch/rocm6.0/libtorch-cxx11-abi-shared-with-deps-2.3.0%2Brocm6.0.zip
+unzip libtorch-cxx11-abi-shared-with-deps-2.3.0+rocm6.0.zip -d /opt/libtorch
+export LIBTORCH=/opt/libtorch
+export LD_LIBRARY_PATH=/opt/libtorch/lib:$LD_LIBRARY_PATH
+export HIP_VISIBLE_DEVICES=0
 ```
 
 ## Pipeline Architecture
@@ -250,7 +264,7 @@ The `ltx-app` crate provides an eframe-based GUI with hover tooltips on all cont
 | **Steps** | Denoising steps: 5-10 quick preview, 20-50 for quality |
 | **CFG Scale** | Classifier-free guidance: 1.0=none, 7.5=default, 15.0+=strong |
 | **Scheduler** | Noise schedule: LTX-2 (default), Linear-Quadratic, Beta |
-| **Device** | Compute backend: CPU, CUDA (NVIDIA), MPS (Apple Metal) |
+| **Device** | Compute backend: CPU, CUDA (NVIDIA), ROCm (AMD), MPS (Apple Metal) |
 | **Generate** | Start video generation |
 | **Export** | Save PNGs, MP4 video (H.264, 8fps), or animated GIF (256×256) |
 
@@ -264,7 +278,7 @@ cargo test -p ltx-components    # scheduler, guider, noiser, diffusion step
 cargo test -p ltx-audio-vae     # audio VAE encoder/decoder
 ```
 
-All 387 tests pass across 21 crates with zero failures.
+All 397 tests pass across 21 crates with zero failures.
 
 ## Weight Conversion
 

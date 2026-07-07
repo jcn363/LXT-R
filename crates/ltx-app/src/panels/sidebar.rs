@@ -118,7 +118,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                     ui.selectable_value(&mut state.device, kind, kind.label());
                 }
             });
-        ui.label("?").on_hover_text("CPU: always works. CUDA: requires NVIDIA GPU with CUDA libtorch installed. See README for setup.");
+        ui.label("?").on_hover_text("CPU: always works. CUDA: requires NVIDIA GPU with CUDA libtorch. ROCm: requires AMD GPU with ROCm libtorch. See README for setup.");
     });
     ui.add_space(8.0);
 

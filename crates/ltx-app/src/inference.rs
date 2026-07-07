@@ -31,7 +31,7 @@ fn run_inference(
 ) -> Result<(), String> {
     let device = match params.device {
         DeviceKind::Cpu => Device::Cpu,
-        DeviceKind::Cuda => Device::Cuda(0),
+        DeviceKind::Cuda | DeviceKind::Rocm => Device::Cuda(0),
     };
 
     let _ = event_tx.send(GuiEvent::Progress { step: 0, total: params.steps, sigma: 0.0 });
