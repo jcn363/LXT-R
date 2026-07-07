@@ -7,36 +7,6 @@ pub enum NormLayerType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum PaddingModeType {
-    Zeros,
-    Reflect,
-    Replicate,
-    Circular,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum ActivationType {
-    SiLU,
-    LeakyReLU,
-    GELU,
-    ReLU,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum ConvDimension {
-    Conv1d,
-    Conv2d,
-    Conv3d,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum AttentionBackend {
-    Sdpa,
-    FlashAttention2,
-    XFormers,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum DType {
     Float32,
     Float16,

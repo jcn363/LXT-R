@@ -14,11 +14,3 @@ pub trait Guider {
     fn guidance_scale(&self) -> f64;
     fn guide(&self, x: &Tensor, uncond: &Tensor) -> Tensor;
 }
-
-pub trait Denoiser {
-    fn denoise(&self, x: &Tensor, sigma: f64, conditioning: &Tensor) -> Tensor;
-}
-
-pub trait TimestepEmbedder {
-    fn embed(&self, timesteps: &Tensor) -> Tensor;
-}

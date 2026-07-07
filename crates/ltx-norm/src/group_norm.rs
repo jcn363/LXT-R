@@ -1,10 +1,11 @@
 use ltx_types::NORM_EPS;
+use tch::nn::Path;
 use tch::Tensor;
 
 /// Thin wrapper around `Tensor::group_norm` that implements `ModuleT`.
 ///
-/// Unlike `tch::nn::group_norm`, this does not require a `Path` for parameter
-/// initialization — the affine weights are stored directly on the struct.
+/// Parameters are registered with a VarStore `Path` so they are
+/// saved/loaded correctly.
 pub struct GroupNorm {
     num_groups: i64,
     num_channels: i64,
@@ -45,9 +46,28 @@ impl GroupNorm {
         }
     }
 
+    /// Create with VarStore-backed parameters.
+    pub fn new_with_path(vs: &Path, num_groups: i64, num_channels: i64, eps: f64) -> Self {
+        let weight = vs.var("weight", &[num_channels], tch::nn::init::Init::Const(1.0));
+        let bias = vs.var("bias", &[num_channels], tch::nn::init::Init::Const(0.0));
+        Self {
+            num_groups,
+            num_channels,
+            eps,
+            cudnn_enabled: true,
+            weight: Some(weight),
+            bias: Some(bias),
+        }
+    }
+
     /// Convenience constructor using `NORM_EPS` from SSOT.
     pub fn with_defaults(num_groups: i64, num_channels: i64) -> Self {
         Self::new(num_groups, num_channels, NORM_EPS, true)
+    }
+
+    /// Convenience constructor with VarStore using `NORM_EPS`.
+    pub fn with_defaults_and_path(vs: &Path, num_groups: i64, num_channels: i64) -> Self {
+        Self::new_with_path(vs, num_groups, num_channels, NORM_EPS)
     }
 
     pub fn forward(&self, x: &Tensor) -> Tensor {

@@ -6,6 +6,7 @@
 Cargo.lock
 graphify-out/
 CLAUDE.local.md
+.mimocode/
 .serena/
 output_frames/
 output_frame.pgm

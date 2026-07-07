@@ -38,8 +38,8 @@ impl SpatialRationalResampler {
         assert!(num > 0 && den > 0, "num and den must be positive");
         assert!(num != den, "num == den means no resampling needed");
 
-        let norm = build_norm_layer(NormLayerType::Group, channels, norm_groups);
         let conv = make_conv_nd(vs / "conv", 3, channels, channels, 3, 1, 1, false, "zeros");
+        let norm = build_norm_layer(NormLayerType::Group, channels, norm_groups);
 
         Self {
             num,

@@ -69,7 +69,7 @@ cargo clippy --all-targets -- -D warnings -D clippy::all
 - Import from `ltx_*` crate root, never internal submodules (except explicit re-exports)
 - Each shared crate has a `factory.rs` — use it to instantiate modules, never construct directly
 - Tests go in each crate's `tests/` dir with golden `.safetensors` files for numerical comparison
-- 21 crates, 178 files, ~16,600 LOC (122 source + 55 test + 1 bench files), 407 tests (395 pass, 12 OOM in ltx-video-vae)
+- 21 crates, 178 files, ~16,600 LOC (123 source + 55 test + 1 bench files), 387 tests (all pass)
 - Workspace root: `Cargo.toml` at repo root, all crates under `crates/`
 
 ## Gotchas

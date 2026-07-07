@@ -12,6 +12,7 @@ use crate::feed_forward::FeedForward;
 /// separate self-attention, cross-attention, and feedforward paths for
 /// audio, plus bidirectional A2V/V2A cross-attention between modalities.
 pub struct AudioModality {
+    pub adaln: AdaLayerNormSingle,
     pub self_attn: TransformerAttention,
     pub cross_attn: TransformerAttention,
     pub norm1: RMSNorm,
@@ -37,6 +38,9 @@ impl AudioModality {
         context_dim: Option<i64>,
         rope_type: RopeType,
     ) -> Self {
+        let adaln = AdaLayerNormSingle::new_with_input_dim(
+            &(vs / "adaln"), dim, DEFAULT_SINUSOIDAL_DIM,
+        );
         let self_attn = TransformerAttention::new(
             &(vs / "audio_attn1"),
             dim,
@@ -82,6 +86,7 @@ impl AudioModality {
             vs.var("audio_scale_shift_table", &[5, dim], tch::nn::init::Init::Const(0.0));
 
         Self {
+            adaln,
             self_attn,
             cross_attn,
             norm1,
@@ -151,22 +156,13 @@ impl AudioModality {
         let h_v2a = self.v2a_attn.forward(&h_v2a, Some(&video), mask, None);
         let shift_v2a = ss.narrow(0, 3, 1).unsqueeze(0).unsqueeze(0);
         let gate_v2a = ss.narrow(0, 4, 1).unsqueeze(0).unsqueeze(0);
-        let audio = audio + gate_v2a * (h_v2a * (Tensor::ones_like(&shift_v2a) + &shift_v2a));
+        let audio = audio + gate_v2a * (h_v2a * (Tensor::ones_like(&shift_v2a) + &shift_v2a) + shift_v2a);
 
         (video, audio)
     }
 
     fn adaln_forward(&self, timestep: &Tensor, kind: tch::Kind) -> (Tensor, Tensor) {
-        // Reuse the adaln from a temporary to get the right shape
-        // We need 6 chunks for audio self-attn and FFN modulation
-        let dim = self.scale_shift_table.size()[1];
-        let mut modulation = Tensor::zeros([timestep.size()[0], 6 * dim], (kind, timestep.device()));
-        // Simplified sinusoidal modulation for audio sub-block.
-        // The main block uses full AdaLayerNormSingle; this lighter version keeps
-        // audio pathway structurally correct without the full learned embedding.
-        let t_emb = timestep.unsqueeze(1).expand([timestep.size()[0], 6 * dim], true);
-        modulation += t_emb * 0.01; // Minimal modulation for structural correctness
-        (modulation, Tensor::zeros([1], (kind, timestep.device())))
+        self.adaln.forward(timestep, kind)
     }
 }
 
