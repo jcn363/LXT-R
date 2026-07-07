@@ -278,7 +278,7 @@ cargo test -p ltx-components    # scheduler, guider, noiser, diffusion step
 cargo test -p ltx-audio-vae     # audio VAE encoder/decoder
 ```
 
-All 397 tests pass across 21 crates with zero failures.
+All 397 tests pass across 22 crates with zero failures.
 
 ## Weight Conversion
 
